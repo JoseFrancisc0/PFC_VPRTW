@@ -47,13 +47,12 @@ int test_benchmark() {
     return 0;
 }
 
-int minitest() {
+int minitest(const std::string& instance_file) {
     try {
         std::cout << "==========================================\n";
         std::cout << "    ALNS - VEHICLE ROUTING PROBLEM (VRPTW)\n";
         std::cout << "==========================================\n";
 
-        std::string instance_file = "..\\mini_instance.txt";
         std::cout << "[1] Cargando instancia: " << instance_file << "...\n";
         Instance inst(instance_file);
         std::cout << "    -> Nodos cargados: " << inst.clients.size() << "\n";
