@@ -22,7 +22,10 @@ void greedyInsertion(Solution& sol){
                     if (!sol.inst.is_reachable[prev][client_id]) continue;
                     if (!sol.inst.is_reachable[client_id][next]) continue;
 
-                    double arrival_u = route.arrival_times[i] +
+                    // Lo obligamos a esperar a que se abra la ventana
+                    double start_prev = std::max(route.arrival_times[i], sol.inst.clients[prev].ready_time);
+
+                    double arrival_u = start_prev +
                                        sol.inst.clients[prev].service_time +
                                        sol.inst.dist_mat[prev][client_id];
                     if (arrival_u > u_client.due_date) continue;
@@ -95,7 +98,10 @@ void regret2Insertion(Solution& sol){
                     if (!sol.inst.is_reachable[prev][client_id]) continue;
                     if (!sol.inst.is_reachable[client_id][next]) continue;
 
-                    double arrival_u = route.arrival_times[i] + 
+                    // Lo obligamos a esperar a que se abra la ventana
+                    double start_prev = std::max(route.arrival_times[i], sol.inst.clients[prev].ready_time);
+
+                    double arrival_u = start_prev + 
                                        sol.inst.clients[prev].service_time +
                                        sol.inst.dist_mat[prev][client_id];
                     if (arrival_u > u_client.due_date) continue;
@@ -181,7 +187,10 @@ void regret3Insertion(Solution& sol){
                     if (!sol.inst.is_reachable[prev][client_id]) continue;
                     if (!sol.inst.is_reachable[client_id][next]) continue;
 
-                    double arrival_u = route.arrival_times[i] + 
+                    // Lo obligamos a esperar a que se abra la ventana
+                    double start_prev = std::max(route.arrival_times[i], sol.inst.clients[prev].ready_time);
+
+                    double arrival_u = start_prev + 
                                        sol.inst.clients[prev].service_time +
                                        sol.inst.dist_mat[prev][client_id];
                     if (arrival_u > u_client.due_date) continue;
@@ -276,7 +285,10 @@ void pGreedyInsertion(Solution& sol, double eta){
                     if (!sol.inst.is_reachable[prev][client_id]) continue;
                     if (!sol.inst.is_reachable[client_id][next]) continue;
 
-                    double arrival_u = route.arrival_times[i] +
+                    // Lo obligamos a esperar a que se abra la ventana
+                    double start_prev = std::max(route.arrival_times[i], sol.inst.clients[prev].ready_time);
+
+                    double arrival_u = start_prev +
                                        sol.inst.clients[prev].service_time +
                                        sol.inst.dist_mat[prev][client_id];
                     if (arrival_u > u_client.due_date) continue;

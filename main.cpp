@@ -13,7 +13,7 @@ int test_benchmark() {
         std::cout << "    ALNS - VEHICLE ROUTING PROBLEM (VRPTW)\n";
         std::cout << "==========================================\n";
 
-        std::string instance_file = "..\\solomon-100\\RC2\\rc201.txt";
+        std::string instance_file = "..\\solomon-100\\r1\\r101.txt";
         std::cout << "[1] Cargando instancia: " << instance_file << "...\n";
         Instance inst(instance_file);
         std::cout << "    -> Nodos cargados: " << inst.clients.size() << "\n";

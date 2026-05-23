@@ -190,7 +190,7 @@ Solution solve_with_classic(const Instance& inst, const Solution& sol, int max_i
     if (!path.empty())
         solver.exportMetrics(path);
 
-    verifySolution(inst, sol);
+    verifySolution(inst, best_solution);
     return best_solution;
 }
 
@@ -203,7 +203,7 @@ Solution solve_with_qlearning(const Instance& inst, const Solution& sol, int max
     if (!path.empty())
         solver.exportMetrics(path);
 
-    verifySolution(inst, sol);
+    verifySolution(inst, best_solution);
     return best_solution;
 }
 
