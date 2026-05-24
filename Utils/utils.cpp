@@ -202,10 +202,9 @@ Solution solve_with_classic(const Instance& inst, const Solution& sol, int max_i
     
     Solution best_solution = solver.solve(max_iters);
 
-    if (!metrics_path.empty() && !routes_path.empty()){
-        solver.exportMetrics(metrics_path);
-        exportSolutionRoutes(best_solution, routes_path);
-    }
+    if (!metrics_path.empty()) solver.exportMetrics(metrics_path);  
+    if (!routes_path.empty()) exportSolutionRoutes(best_solution, routes_path);
+    
     verifySolution(inst, best_solution);
     return best_solution;
 }
@@ -216,10 +215,8 @@ Solution solve_with_qlearning(const Instance& inst, const Solution& sol, int max
 
     Solution best_solution = solver.solve(max_iters);
 
-    if (!metrics_path.empty() && !routes_path.empty()) {
-        solver.exportMetrics(metrics_path);
-        exportSolutionRoutes(best_solution, routes_path);
-    }
+    if (!metrics_path.empty()) solver.exportMetrics(metrics_path);  
+    if (!routes_path.empty()) exportSolutionRoutes(best_solution, routes_path);
 
     verifySolution(inst, best_solution);
     return best_solution;

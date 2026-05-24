@@ -16,7 +16,7 @@ int test_benchmark() {
         std::cout << "==========================================\n";
         std::cout << "[INFO] Seed utilizada: " << seed << "\n";
 
-        std::string instance_file = "../solomon-100/c2/c201.txt";
+        std::string instance_file = "../solomon-100/r1/r101.txt";
         std::cout << "[1] Cargando instancia: " << instance_file << "...\n";
         Instance inst(instance_file);
         std::cout << "    -> Nodos cargados: " << inst.clients.size() << "\n";
@@ -30,8 +30,8 @@ int test_benchmark() {
         auto start_time = std::chrono::high_resolution_clock::now();
     
         // Elige uno
-        // Solution best_solution = solve_with_classic(inst, initial_sol, max_iterations, "../Results/alns_metrics.csv");
-        Solution best_solution = solve_with_qlearning(inst, initial_sol, max_iterations, "../Results/alns_qlearning_metrics.csv");
+        Solution best_solution = solve_with_classic(inst, initial_sol, max_iterations, "../Results/alns_metrics.csv");
+        // Solution best_solution = solve_with_qlearning(inst, initial_sol, max_iterations, "../Results/alns_qlearning_metrics.csv");
 
         auto end_time = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end_time - start_time;

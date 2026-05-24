@@ -22,8 +22,8 @@ void ALNS_QLearning::initOps() {
 
     // 0: Mejorando, 1: Estancado, 2: Atrapado
     num_states = 3; 
-    Q_destroy.assign(num_states, std::vector<double>(destroy_ops.size(), 0.0));
-    Q_repair.assign(num_states, std::vector<double>(repair_ops.size(), 0.0));
+    Q_destroy.assign(num_states, std::vector<double>(destroy_ops.size(), 50.0));
+    Q_repair.assign(num_states, std::vector<double>(repair_ops.size(), 50.0));
 }
 
 std::vector<double> ALNS_QLearning::getSoftmaxProbabilities(const std::vector<double>& q_values, double tau) {
@@ -55,8 +55,8 @@ bool ALNS_QLearning::accept(double cand_cost, double curr_cost, double T) {
 }
 
 Solution ALNS_QLearning::solve(int max_iters) {
-    double initial_c = cost(current_sol);
-    start_temp = -(0.05 * initial_c) / std::log(0.5);
+    double initial_d = current_sol.total_distance;
+    start_temp = -(0.1 * initial_d) / std::log(0.5);
     double T = start_temp;
     
     double tau = 5.0;  
@@ -93,10 +93,8 @@ Solution ALNS_QLearning::solve(int max_iters) {
         double curr_cost = cost(current_sol);
         double best_cost = cost(best_sol);
 
-        if (cand_cost <= best_cost) {
-            if (cand_cost < best_cost){
-                best_sol = candidate;
-            }
+        if (cand_cost < best_cost) {
+            best_sol = candidate;
             current_sol = candidate;
             reward = w1; 
             global_improved = true;
@@ -105,12 +103,16 @@ Solution ALNS_QLearning::solve(int max_iters) {
             current_sol = candidate;
             reward = w2; 
         }
+        else if (cand_cost == best_cost) {
+            current_sol = candidate;
+            reward = w2;
+        }
         else if (accept(cand_cost, curr_cost, T)) { 
             current_sol = candidate;
             reward = w3; 
         }
 
-        if (cand_cost < curr_cost) {
+        if (cand_cost < curr_cost || cand_cost < best_cost) {
             iters_without_improvement = 0;
         } else {
             iters_without_improvement++;

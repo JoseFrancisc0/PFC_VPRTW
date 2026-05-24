@@ -68,8 +68,8 @@ void ALNS::updateWeights(int used_destroy_idx, int used_repair_idx, double score
 }
 
 Solution ALNS::solve(int max_iters) {
-    double initial_c = cost(current_sol);
-    start_temp = -(0.05 * initial_c) / std::log(0.5);
+    double initial_d = current_sol.total_distance;
+    start_temp = -(0.10 * initial_d) / std::log(0.5);
     double T = start_temp;
     int n_customers = inst.clients.size() - 1;
     history.reserve(max_iters);
@@ -96,13 +96,16 @@ Solution ALNS::solve(int max_iters) {
         double curr_cost = cost(current_sol);
         double best_cost = cost(best_sol);
 
-        if (cand_cost <= best_cost) {
-            if (cand_cost < best_cost){
-                // Nuevo mejor global
-                best_sol = candidate;
-            }
+        if (cand_cost < best_cost) {
+            // Nuevo mejor global
+            best_sol = candidate;
             current_sol = candidate;
             score = w1;
+        }
+        else if (cand_cost == best_cost) {
+            // Si empata con el mejor global
+            current_sol = candidate;
+            score = w2;
         }
         else if (cand_cost < curr_cost) {
             // Nuevo mejor actual
