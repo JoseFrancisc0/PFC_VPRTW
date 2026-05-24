@@ -18,7 +18,6 @@ struct IterationDataQL {
     double curr_distance;
     int d_idx;
     int r_idx;
-    double score;
     double reward;
     double temp;
     std::vector<double> d_weights;
@@ -42,7 +41,7 @@ class ALNS_QLearning {
         std::vector<DestroyOp> destroy_ops;
         std::vector<RepairOp> repair_ops;
 
-        double start_temp = 100.0;
+        double start_temp;
         double cooling_rate = 0.9995;
         double w1 = 33.0, w2 = 13.0, w3 = 9.0, w4 = 0.0;
         double alpha = 0.1; 
@@ -52,7 +51,7 @@ class ALNS_QLearning {
         std::vector<std::vector<double>> Q_repair;
 
         void initOps();
-        bool accept(const Solution& candidate, double current_temp);
+        bool accept(double cand_cost, double curr_cost, double current_temp);
 
         std::vector<double> getSoftmaxProbabilities(const std::vector<double>& q_values, double tau);
         int selectOp(const std::vector<double>& probs);

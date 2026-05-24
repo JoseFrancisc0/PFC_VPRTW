@@ -8,7 +8,8 @@ add_executable(ALNS_VRPTW
                Operators/destroy_ops.cpp 
                Operators/repair_ops.cpp 
                ALNS/alns.cpp 
-               ALNS/alns_qlearning.cpp)
+               ALNS/alns_qlearning.cpp
+               Utils/utils.cpp)
 
 target_compile_options(ALNS_VRPTW PRIVATE "-O3")
 

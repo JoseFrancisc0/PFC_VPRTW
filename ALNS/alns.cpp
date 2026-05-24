@@ -41,14 +41,10 @@ int ALNS::selectRepairOp() {
     return selected_idx;
 }
 
-bool ALNS::accept(const Solution& candidate, double current_temp) {
-    double current_cost = cost(current_sol);
-    double candidate_cost = cost(candidate);
-
-    // Mejor que la solucion actual?
-    if (candidate_cost <= current_cost) return true;
-
-    double delta = candidate_cost - current_cost;
+bool ALNS::accept(double cand_cost, double curr_cost, double current_temp) {
+    double delta = cand_cost - curr_cost;
+    if (delta <= 0) return true;
+    
     double prob  = std::exp(-delta / current_temp);
     std::uniform_real_distribution<double> distr(0.0, 1.0);
     double random_val = distr(rng);
@@ -72,18 +68,19 @@ void ALNS::updateWeights(int used_destroy_idx, int used_repair_idx, double score
 }
 
 Solution ALNS::solve(int max_iters) {
+    double initial_c = cost(current_sol);
+    start_temp = -(0.05 * initial_c) / std::log(0.5);
     double T = start_temp;
-    int n_customers = N_NODES - 1;
+    int n_customers = inst.clients.size() - 1;
     history.reserve(max_iters);
+
+    int q_min = std::max(4, static_cast<int>(0.10 * n_customers));
+    int q_max = std::max(q_min + 1, static_cast<int>(0.4 * n_customers));
+    std::uniform_int_distribution<int> q_distr(q_min, q_max);
 
     for (int iter = 0; iter < max_iters; ++iter) {
         Solution candidate = current_sol;
-
-        // Grado de destruccion (cuantos clientes se busca eliminar)
-        int q_min = std::max(4, static_cast<int>(0.10 * n_customers));
-        int q_max = std::max(q_min + 1, static_cast<int>(0.4 * n_customers));
-        std::uniform_int_distribution<int> q_distr(q_min, q_max);
-        int q = q_distr(rng);
+        int q = q_distr(rng); // Grado de destruccion (cuantos clientes se busca eliminar)
 
         // Seleccion de operadores
         int d_idx = selectDestroyOp();
@@ -99,9 +96,11 @@ Solution ALNS::solve(int max_iters) {
         double curr_cost = cost(current_sol);
         double best_cost = cost(best_sol);
 
-        if (cand_cost < best_cost) {
-            // Nuevo mejor global
-            best_sol = candidate;
+        if (cand_cost <= best_cost) {
+            if (cand_cost < best_cost){
+                // Nuevo mejor global
+                best_sol = candidate;
+            }
             current_sol = candidate;
             score = w1;
         }
@@ -110,7 +109,7 @@ Solution ALNS::solve(int max_iters) {
             current_sol = candidate;
             score = w2;
         }
-        else if (accept(candidate, T)) {
+        else if (accept(cand_cost, curr_cost, T)) {
             // Solucion aceptada 
             current_sol = candidate;
             score = w3;

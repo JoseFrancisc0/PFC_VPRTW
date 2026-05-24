@@ -19,7 +19,9 @@ void Route::recalculate(const Instance& inst) {
         int next = path[i+1];
 
         distance += inst.dist_mat[curr][next];
-        load += inst.clients[curr].demand;
+
+        if (curr != 0)
+            load += inst.clients[curr].demand;
 
         double start_service = std::max(current_time, inst.clients[curr].ready_time);
         double arrival_at_next= start_service + inst.clients[curr].service_time + inst.dist_mat[curr][next];
@@ -28,8 +30,6 @@ void Route::recalculate(const Instance& inst) {
         wait_times[i + 1] = std::max(0.0, inst.clients[next].ready_time - arrival_at_next);
         current_time = arrival_at_next;
     }
-
-    load -= inst.clients[0].demand;
 
     int last = path[L - 1];
     double start_service_last = std::max(arrival_times[L - 1], inst.clients[last].ready_time);
@@ -54,27 +54,29 @@ void Instance::loadSolomon(const std::string& path) {
     std::string dummy;
     while (file >> dummy && dummy != "CAPACITY") {}
 
-    int num_vehicles;
     file >> num_vehicles >> capacity;
 
     while (file >> dummy && dummy != "SERVICE") {}
     file >> dummy;
 
-    for (int i = 0; i < N_NODES; ++i) {
-        int id;
-        double x, y, demand, ready_time, due_date, service_time;
-
-        file >> id >> x >> y >> demand >> ready_time >> due_date >> service_time;
+    int id;
+    double x, y, demand, ready_time, due_date, service_time;
+    while (file >> id >> x >> y >> demand >> ready_time >> due_date >> service_time) {
         clients.emplace_back(id, x, y, demand, ready_time, due_date, service_time);
     }
-
     file.close();
+
+    int N = clients.size();
+    dist_mat.assign(N, std::vector<double>(N, 0.0));
+    is_reachable.assign(N, std::vector<bool>(N, false));
+    
 }
 
 // Precomputar distancias
 void Instance::precomputeDistances() {
-    for (int i = 0; i < N_NODES; ++i) {
-        for (int j = 0; j < N_NODES; ++j) {
+    int N = clients.size();
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
             if (i == j)
                 dist_mat[i][j] = 0.0;
             else {
@@ -88,8 +90,9 @@ void Instance::precomputeDistances() {
 
 // Precomputar rutas validas
 void Instance::precomputeFeasibility() {
-    for (int i = 0; i < N_NODES; ++i) {
-        for (int j = 0; j < N_NODES; ++j) {
+    int N = clients.size();
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
             if (i == j) {
                 is_reachable[i][j] = false;
                 continue;

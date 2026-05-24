@@ -47,20 +47,20 @@ class ALNS {
         std::vector<double> repair_weights;
 
         // Hiperparametros del ALNS
-        double decay = 0.1;
+        double decay = 0.9;
         double w1 = 33.0;
         double w2 = 13.0;
         double w3 = 9.0;
         double w4 = 0.0;
 
         // Hiperparametros del Simulated Annealing
-        double start_temp = 100.0;
+        double start_temp;
         double cooling_rate = 0.9995;
 
         void initOps();
         int selectDestroyOp();
         int selectRepairOp();
-        bool accept(const Solution& candidate, double current_temp);
+        bool accept(double cand_cost, double curr_cost, double current_temp);
         void updateWeights(int used_destroy_idx, int used_repair_idx, double score);
 };
 

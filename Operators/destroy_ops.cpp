@@ -2,9 +2,10 @@
 
 /// Quitamos clientes aleatorios de rutas
 void randomRemoval(Solution& sol, int q){
+    int N = sol.inst.clients.size();
     int removed = 0;
 
-    while (removed < q && sol.unassigned.size() < N_NODES - 1){
+    while (removed < q && sol.unassigned.size() < N - 1){
         std::vector<int> active_routes;
         for (int i = 0; i < sol.routes.size(); ++i) {
             if (sol.routes[i].path.size() > 2) {
@@ -33,9 +34,10 @@ void randomRemoval(Solution& sol, int q){
 
 // Eliminamos rutas aleatorias
 void routeRemoval(Solution& sol, int q){
+    int N = sol.inst.clients.size();
     int removed = 0;
 
-    while (removed < q && sol.unassigned.size() < N_NODES - 1) {
+    while (removed < q && sol.unassigned.size() < N - 1) {
         std::vector<int> active_routes;
         for (int i = 0; i < sol.routes.size(); ++i)
             if (sol.routes[i].path.size() > 2)
@@ -64,9 +66,10 @@ void routeRemoval(Solution& sol, int q){
 
 // Eliminamos clientes mas ineficientes
 void worstRemoval(Solution& sol, int q, double p){
+    int N = sol.inst.clients.size();
     int removed = 0;
 
-    while (removed < q && sol.unassigned.size() < N_NODES - 1) {
+    while (removed < q && sol.unassigned.size() < N - 1) {
         std::vector<RemovalCandidate> candidates;
 
         for (int r = 0; r < sol.routes.size(); ++r) {
@@ -115,6 +118,7 @@ void shawRemoval(Solution& sol, int q, double p){
     const double w_time = 3.0;
     const double w_demand = 2.0;
 
+    int N = sol.inst.clients.size();
     int removed = 0;
     std::vector<int> removed_clients;
 
@@ -139,7 +143,7 @@ void shawRemoval(Solution& sol, int q, double p){
     first_route.recalculate(sol.inst);
     removed++;
 
-    while (removed < q && sol.unassigned.size() < N_NODES - 1) {
+    while (removed < q && sol.unassigned.size() < N - 1) {
         std::uniform_int_distribution<int> base_distr(0, removed_clients.size() - 1);
         int base_client_id = removed_clients[base_distr(rng)];
         const Client& base_client = sol.inst.clients[base_client_id];
@@ -166,7 +170,7 @@ void shawRemoval(Solution& sol, int q, double p){
 
         std::sort(candidates.begin(), candidates.end(),
             [](const RelatednessCandidate& a, const RelatednessCandidate& b) {
-                return a.relatedness > b.relatedness;
+                return a.relatedness < b.relatedness;
             });
         
         std::uniform_real_distribution<double> y_distr(0.0, 1.0);

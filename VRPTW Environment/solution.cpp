@@ -55,9 +55,10 @@ void Solution::updateMetrics() {
 
 // Generar solucion inicial (NN-Based)
 void Solution::generateInitialSolution() {
-    std::vector<bool> visited(N_NODES, false);
+    int N = inst.clients.size();
+    std::vector<bool> visited(N, false);
     visited[0] = true;
-    int unvisited = N_NODES - 1;
+    int unvisited = N - 1;
 
     while (unvisited > 0) {
         Route current_route;
@@ -72,7 +73,7 @@ void Solution::generateInitialSolution() {
             int best_client = -1;
             double best_distance = std::numeric_limits<double>::max();
 
-            for (int i = 1; i < N_NODES; ++i) {
+            for (int i = 1; i < N; ++i) {
                 if (visited[i]) continue;
                 if (!inst.is_reachable[current_node][i]) continue;
                 if (current_load + inst.clients[i].demand > inst.capacity) continue;
@@ -108,12 +109,21 @@ void Solution::generateInitialSolution() {
                 added_client = true;
             }
             else {
-                if (current_node == 0)
-                    throw std::runtime_error("No hay clientes factibles desde el deposito.");
+                if (current_node == 0) {
+                    for (int i = 1; i < N; ++i) {
+                        if (!visited[i]) {
+                            unassigned.push_back(i);
+                            visited[i] = true;
+                            unvisited--;
+                        }
+                    }
+                    break;
+                }
             }
         }
         
         current_route.distance += inst.dist_mat[current_node][0];
+        current_route.recalculate(inst);
         routes.push_back(current_route);
     }
 

@@ -10,9 +10,6 @@
 
 extern std::mt19937 rng;
 
-const int N_NODES = 101; // 100 clientes + deposito (0)
-const int N_VEHICLES = 25;
-
 // Struct del cliente
 struct Client {
     int id;
@@ -55,14 +52,13 @@ struct Route {
 // Clase de la instancia
 class Instance {
     public:
+        int num_vehicles;
         int capacity;
         std::vector<Client> clients;
-        double dist_mat[N_NODES][N_NODES];
-        bool is_reachable[N_NODES][N_NODES];
+        std::vector<std::vector<double>> dist_mat;
+        std::vector<std::vector<bool>> is_reachable;
 
         Instance(const std::string& path) {
-            clients.reserve(N_NODES);
-
             loadSolomon(path);
             precomputeDistances();
             precomputeFeasibility();

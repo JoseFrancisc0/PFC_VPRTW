@@ -1,5 +1,35 @@
 #include "operators.h"
 
+bool evalInsertion(const Solution& sol, int client_id, const Route& route, size_t i, double& delta_cost) {
+    int prev = route.path[i];
+    int next = route.path[i + 1];
+    const Client& u_client = sol.inst.clients[client_id];
+
+    // Existe la ruta?
+    if (!sol.inst.is_reachable[prev][client_id]) return false;
+    if (!sol.inst.is_reachable[client_id][next]) return false;
+
+    // Se llega a tiempo? (time windows)
+    double start_prev = std::max(route.arrival_times[i], sol.inst.clients[prev].ready_time);
+    double arrival_u = start_prev + sol.inst.clients[prev].service_time + sol.inst.dist_mat[prev][client_id];
+
+    if (arrival_u > u_client.due_date) return false;
+
+    // Se llega a tiempo? (slack times)
+    double start_u = std::max(arrival_u, u_client.ready_time);
+    double arrival_j_new = start_u + u_client.service_time + sol.inst.dist_mat[client_id][next];
+    double delay = std::max(0.0, arrival_j_new - route.arrival_times[i + 1]);
+    
+    if (delay > route.wait_times[i+1] + route.time_slacks[i+1]) return false;
+
+    // Desviacion del costo
+    delta_cost = sol.inst.dist_mat[prev][client_id] + 
+                 sol.inst.dist_mat[client_id][next] - 
+                 sol.inst.dist_mat[prev][next];
+                 
+    return true;
+}
+
 // Insertamos lo que minimiza el aumento inmediato de costo
 void greedyInsertion(Solution& sol){
     while (!sol.unassigned.empty()) {
@@ -17,27 +47,9 @@ void greedyInsertion(Solution& sol){
                 if (route.load + u_client.demand > sol.inst.capacity) continue;
 
                 for (size_t i = 0; i < route.path.size() - 1; ++i) {
-                    int prev = route.path[i];
-                    int next = route.path[i + 1];
-                    if (!sol.inst.is_reachable[prev][client_id]) continue;
-                    if (!sol.inst.is_reachable[client_id][next]) continue;
+                    double delta_cost = 0.0;
+                    if (!evalInsertion(sol, client_id, route, i, delta_cost)) continue;
 
-                    // Lo obligamos a esperar a que se abra la ventana
-                    double start_prev = std::max(route.arrival_times[i], sol.inst.clients[prev].ready_time);
-
-                    double arrival_u = start_prev +
-                                       sol.inst.clients[prev].service_time +
-                                       sol.inst.dist_mat[prev][client_id];
-                    if (arrival_u > u_client.due_date) continue;
-
-                    double start_u = std::max(arrival_u, u_client.ready_time);
-                    double arrival_j_new = start_u + u_client.service_time + sol.inst.dist_mat[client_id][next];
-                    double delay = std::max(0.0, arrival_j_new - route.arrival_times[i + 1]);
-                    if (delay > route.wait_times[i+1] + route.time_slacks[i+1]) continue;
-                
-                    double delta_cost = sol.inst.dist_mat[prev][client_id] +
-                                        sol.inst.dist_mat[client_id][next] -
-                                        sol.inst.dist_mat[prev][next];
                     if (delta_cost < best_cost) {
                         best_cost = delta_cost;
                         best_client_idx_in_unassigned = u_idx;
@@ -54,14 +66,14 @@ void greedyInsertion(Solution& sol){
             
             target_route.path.insert(target_route.path.begin() + best_insert_pos, client_to_insert);
             target_route.recalculate(sol.inst);
-            sol.unassigned.erase(sol.unassigned.begin() + best_client_idx_in_unassigned);
+            sol.unassigned[best_client_idx_in_unassigned] = sol.unassigned.back();
+            sol.unassigned.pop_back();
         }
         else {
             if (!sol.routes.empty() && sol.routes.back().path.size() <= 2) {
-                int forced_client = sol.unassigned[0];
-                sol.routes.back().path.insert(sol.routes.back().path.begin() + 1, forced_client);
-                sol.routes.back().recalculate(sol.inst);
-                sol.unassigned.erase(sol.unassigned.begin());
+                std::cerr << "[!] " << sol.unassigned.size() 
+                          << " clientes no pudieron ser insertados de forma factible. \n";
+                break;
             } 
             else
                 sol.routes.push_back(Route());
@@ -93,27 +105,9 @@ void regret2Insertion(Solution& sol){
                 if (route.load + u_client.demand > sol.inst.capacity) continue;
 
                 for (size_t i = 0; i < route.path.size() - 1; ++i) {
-                    int prev = route.path[i];
-                    int next = route.path[i+1];
-                    if (!sol.inst.is_reachable[prev][client_id]) continue;
-                    if (!sol.inst.is_reachable[client_id][next]) continue;
+                    double delta_cost = 0.0;
+                    if (!evalInsertion(sol, client_id, route, i, delta_cost)) continue;
 
-                    // Lo obligamos a esperar a que se abra la ventana
-                    double start_prev = std::max(route.arrival_times[i], sol.inst.clients[prev].ready_time);
-
-                    double arrival_u = start_prev + 
-                                       sol.inst.clients[prev].service_time +
-                                       sol.inst.dist_mat[prev][client_id];
-                    if (arrival_u > u_client.due_date) continue;
-
-                    double start_u = std::max(arrival_u, u_client.ready_time);
-                    double arrival_j_new = start_u + u_client.service_time + sol.inst.dist_mat[client_id][next];
-                    double delay = std::max(0.0, arrival_j_new - route.arrival_times[i + 1]);
-                    if (delay > route.wait_times[i + 1] + route.time_slacks[i + 1]) continue;
-
-                    double delta_cost = sol.inst.dist_mat[prev][client_id] +
-                                        sol.inst.dist_mat[client_id][next] -
-                                        sol.inst.dist_mat[prev][next];
                     if (delta_cost < best_cost) {
                         second_best_cost = best_cost;
                         best_cost = delta_cost;
@@ -126,7 +120,8 @@ void regret2Insertion(Solution& sol){
             }
 
             if (best_cost != std::numeric_limits<double>::max()) {
-                double regret = second_best_cost - best_cost;
+                double regret = (second_best_cost == std::numeric_limits<double>::max())
+                                ? 1e9 : (second_best_cost - best_cost);
 
                 if (regret > max_regret) {
                     max_regret = regret;
@@ -143,14 +138,14 @@ void regret2Insertion(Solution& sol){
 
             target_route.path.insert(target_route.path.begin() + global_best_pos, client_to_insert);
             target_route.recalculate(sol.inst);
-            sol.unassigned.erase(sol.unassigned.begin() + best_client_idx_in_unassigned);
+            sol.unassigned[best_client_idx_in_unassigned] = sol.unassigned.back();
+            sol.unassigned.pop_back();
         }
         else {
             if (!sol.routes.empty() && sol.routes.back().path.size() <= 2) {
-                int forced_client = sol.unassigned[0];
-                sol.routes.back().path.insert(sol.routes.back().path.begin() + 1, forced_client);
-                sol.routes.back().recalculate(sol.inst);
-                sol.unassigned.erase(sol.unassigned.begin());
+                std::cerr << "[!] " << sol.unassigned.size() 
+                          << " clientes no pudieron ser insertados de forma factible. \n";
+                break;
             } 
             else
                 sol.routes.push_back(Route());
@@ -182,27 +177,9 @@ void regret3Insertion(Solution& sol){
                 int best_pos_in_r = -1;
 
                 for (size_t i = 0; i < route.path.size() - 1; ++i) {
-                    int prev = route.path[i];
-                    int next = route.path[i+1];
-                    if (!sol.inst.is_reachable[prev][client_id]) continue;
-                    if (!sol.inst.is_reachable[client_id][next]) continue;
+                    double delta_cost = 0.0;
+                    if (!evalInsertion(sol, client_id, route, i, delta_cost)) continue;
 
-                    // Lo obligamos a esperar a que se abra la ventana
-                    double start_prev = std::max(route.arrival_times[i], sol.inst.clients[prev].ready_time);
-
-                    double arrival_u = start_prev + 
-                                       sol.inst.clients[prev].service_time +
-                                       sol.inst.dist_mat[prev][client_id];
-                    if (arrival_u > u_client.due_date) continue;
-
-                    double start_u = std::max(arrival_u, u_client.ready_time);
-                    double arrival_j_new = start_u + u_client.service_time + sol.inst.dist_mat[client_id][next];
-                    double delay = std::max(0.0, arrival_j_new - route.arrival_times[i + 1]);
-                    if (delay > route.wait_times[i + 1] + route.time_slacks[i + 1]) continue;
-
-                    double delta_cost = sol.inst.dist_mat[prev][client_id] +
-                                        sol.inst.dist_mat[client_id][next] -
-                                        sol.inst.dist_mat[prev][next];
                     if (delta_cost < best_cost_in_r) {
                         best_cost_in_r = delta_cost;
                         best_pos_in_r = i + 1;
@@ -244,14 +221,14 @@ void regret3Insertion(Solution& sol){
 
             target_route.path.insert(target_route.path.begin() + global_best_pos, client_to_insert);
             target_route.recalculate(sol.inst);
-            sol.unassigned.erase(sol.unassigned.begin() + best_client_idx_in_unassigned);
+            sol.unassigned[best_client_idx_in_unassigned] = sol.unassigned.back();
+            sol.unassigned.pop_back();
         }
         else {
             if (!sol.routes.empty() && sol.routes.back().path.size() <= 2) {
-                int forced_client = sol.unassigned[0];
-                sol.routes.back().path.insert(sol.routes.back().path.begin() + 1, forced_client);
-                sol.routes.back().recalculate(sol.inst);
-                sol.unassigned.erase(sol.unassigned.begin());
+                std::cerr << "[!] " << sol.unassigned.size() 
+                          << " clientes no pudieron ser insertados de forma factible. \n";
+                break;
             } 
             else
                 sol.routes.push_back(Route());
@@ -280,28 +257,10 @@ void pGreedyInsertion(Solution& sol, double eta){
                 if (route.load + u_client.demand > sol.inst.capacity) continue;
 
                 for (size_t i = 0; i < route.path.size() - 1; ++i) {
-                    int prev = route.path[i];
-                    int next = route.path[i + 1];
-                    if (!sol.inst.is_reachable[prev][client_id]) continue;
-                    if (!sol.inst.is_reachable[client_id][next]) continue;
+                    double delta_cost = 0.0;
+                    if (!evalInsertion(sol, client_id, route, i, delta_cost)) continue;
 
-                    // Lo obligamos a esperar a que se abra la ventana
-                    double start_prev = std::max(route.arrival_times[i], sol.inst.clients[prev].ready_time);
-
-                    double arrival_u = start_prev +
-                                       sol.inst.clients[prev].service_time +
-                                       sol.inst.dist_mat[prev][client_id];
-                    if (arrival_u > u_client.due_date) continue;
-
-                    double start_u = std::max(arrival_u, u_client.ready_time);
-                    double arrival_j_new = start_u + u_client.service_time + sol.inst.dist_mat[client_id][next];
-                    double delay = std::max(0.0, arrival_j_new - route.arrival_times[i + 1]);
-                    if (delay > route.wait_times[i+1] + route.time_slacks[i+1]) continue;
-                
-                    double real_cost = sol.inst.dist_mat[prev][client_id] +
-                                        sol.inst.dist_mat[client_id][next] -
-                                        sol.inst.dist_mat[prev][next];
-                    double perturbed_cost = real_cost * noise_distr(rng);
+                    double perturbed_cost = delta_cost * noise_distr(rng);
                     if (perturbed_cost < best_cost) {
                         best_cost = perturbed_cost;
                         best_client_idx_in_unassigned = u_idx;
@@ -318,14 +277,14 @@ void pGreedyInsertion(Solution& sol, double eta){
 
             target_route.path.insert(target_route.path.begin() + best_insert_pos, client_to_insert);
             target_route.recalculate(sol.inst);
-            sol.unassigned.erase(sol.unassigned.begin() + best_client_idx_in_unassigned);
+            sol.unassigned[best_client_idx_in_unassigned] = sol.unassigned.back();
+            sol.unassigned.pop_back();
         }
         else {
             if (!sol.routes.empty() && sol.routes.back().path.size() <= 2) {
-                int forced_client = sol.unassigned[0];
-                sol.routes.back().path.insert(sol.routes.back().path.begin() + 1, forced_client);
-                sol.routes.back().recalculate(sol.inst);
-                sol.unassigned.erase(sol.unassigned.begin());
+                std::cerr << "[!] " << sol.unassigned.size() 
+                          << " clientes no pudieron ser insertados de forma factible. \n";
+                break;
             } 
             else
                 sol.routes.push_back(Route());
