@@ -2,6 +2,7 @@ import os
 import subprocess
 import time
 import glob
+import csv
 
 EXEC_PATH = "../build/ALNS_vrptw.exe"
 BENCHMARK_DIR = "../solomon-100"
@@ -24,22 +25,22 @@ def preparar_directorios():
 def obtener_instancias():
     patron = os.path.join(BENCHMARK_DIR, "**", "*.txt")
     instancias = glob.glob(patron, recursive=True)
-    
     return sorted(instancias)
 
 def ejecutar_experimentos():
     preparar_directorios()
-    
     instancias = obtener_instancias()
     if not instancias:
         print(f"[ERROR] No se encontraron instancias en {BENCHMARK_DIR}")
         return
 
     total_instancias = len(instancias)
-    total_corridas = total_instancias * len(ALGORITMOS) * RUNS
-    corrida_actual = 0
+    total_runs = total_instancias * len(ALGORITMOS) * RUNS
+    run_actual = 0
     
-    print(f"\n=== Iniciando Campaña: {total_instancias} instancias | {total_corridas} ejecuciones ===")
+    registro_tiempos = []
+
+    print(f"\n=== Iniciando experimentos: {total_instancias} instancias | {total_runs} ejecuciones ===")
     start_total = time.time()
     
     for inst_path in instancias:
@@ -47,10 +48,10 @@ def ejecutar_experimentos():
         
         for algo in ALGORITMOS:
             for run in range(1, RUNS + 1):
-                corrida_actual += 1
-                start_run = time.time()
+                run_actual += 1
+                start_run = time.perf_counter()
                 
-                print(f"[{corrida_actual}/{total_corridas}] Ejecutando {algo} | Instancia: {inst_name} | Run: {run}...", end="", flush=True)
+                print(f"[{run_actual}/{total_runs}] Ejecutando {algo} | Instancia: {inst_name} | Run: {run}...", end="", flush=True)
                 
                 comando = [
                     EXEC_PATH,
@@ -62,21 +63,34 @@ def ejecutar_experimentos():
                 
                 try:
                     resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
-                    end_run = time.time()
+                    end_run = time.perf_counter()
+                    time_run = end_run - start_run
                     print(f" [OK] ({(end_run - start_run):.2f} seg)")
+
+                    registro_tiempos.append({
+                        "Instancia": inst_name.lower(),
+                        "Algoritmo": algo,
+                        "Run": run,
+                        "Tiempo_s": round(time_run, 4)
+                    })
                     
                 except subprocess.CalledProcessError as e:
                     print(f" [ERROR FATAL]")
-                    print("--- SALIDA DEL ERROR DE C++ ---")
                     print(e.stderr)
-                    print("-------------------------------")
                     continue 
 
     end_total = time.time()
+
+    csv_path = os.path.join(RESULTS_DIR, "tiempos_ejecucion_limpios.csv")
+    with open(csv_path, mode='w', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=["Instancia", "Algoritmo", "Run", "Tiempo_s"])
+        writer.writeheader()
+        writer.writerows(registro_tiempos)
+
     horas, rem = divmod(end_total - start_total, 3600)
     minutos, segundos = divmod(rem, 60)
     print(f"\n=== Experimentos terminados en {int(horas)}h {int(minutos)}m {segundos:.2f}s ===")
-    print("Revisa la carpeta RESULTS para ver todos los archivos generados.")
+    print(f"-> Archivo de tiempos guardado con éxito en: {csv_path}")
 
 if __name__ == "__main__":
     ejecutar_experimentos()
