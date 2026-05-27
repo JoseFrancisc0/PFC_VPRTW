@@ -102,11 +102,6 @@ Solution ALNS::solve(int max_iters) {
             current_sol = candidate;
             score = w1;
         }
-        else if (cand_cost == best_cost) {
-            // Si empata con el mejor global
-            current_sol = candidate;
-            score = w2;
-        }
         else if (cand_cost < curr_cost) {
             // Nuevo mejor actual
             current_sol = candidate;

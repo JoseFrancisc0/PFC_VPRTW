@@ -12,6 +12,7 @@
 
 struct IterationDataQL {
     int iter;
+    int state;
     int best_vehicles;
     double best_distance;
     int curr_vehicles;
@@ -49,6 +50,9 @@ class ALNS_QLearning {
         int num_states = 3;
         std::vector<std::vector<double>> Q_destroy;
         std::vector<std::vector<double>> Q_repair;
+
+        std::vector<std::vector<double>> Q_destroy_best;
+        std::vector<std::vector<double>> Q_repair_best;
 
         void initOps();
         bool accept(double cand_cost, double curr_cost, double current_temp);

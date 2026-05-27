@@ -16,7 +16,7 @@ int test_benchmark() {
         std::cout << "==========================================\n";
         std::cout << "[INFO] Seed utilizada: " << seed << "\n";
 
-        std::string instance_file = "../solomon-100/r1/r101.txt";
+        std::string instance_file = "../solomon-100/rc1/rc107.txt";
         std::cout << "[1] Cargando instancia: " << instance_file << "...\n";
         Instance inst(instance_file);
         std::cout << "    -> Nodos cargados: " << inst.clients.size() << "\n";

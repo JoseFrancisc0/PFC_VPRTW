@@ -98,21 +98,19 @@ Solution ALNS_QLearning::solve(int max_iters) {
             current_sol = candidate;
             reward = w1; 
             global_improved = true;
+            Q_destroy_best = Q_destroy;
+            Q_repair_best = Q_repair;
         }
         else if (cand_cost < curr_cost) {
             current_sol = candidate;
             reward = w2; 
-        }
-        else if (cand_cost == best_cost) {
-            current_sol = candidate;
-            reward = w2;
         }
         else if (accept(cand_cost, curr_cost, T)) { 
             current_sol = candidate;
             reward = w3; 
         }
 
-        if (cand_cost < curr_cost || cand_cost < best_cost) {
+        if (global_improved || cand_cost < curr_cost) {
             iters_without_improvement = 0;
         } else {
             iters_without_improvement++;
@@ -135,6 +133,7 @@ Solution ALNS_QLearning::solve(int max_iters) {
         
         IterationDataQL data;
         data.iter = iter;
+        data.state = current_state;
         data.best_vehicles = best_sol.used_vehicles;
         data.best_distance = best_sol.total_distance;
         data.curr_vehicles = current_sol.used_vehicles;
@@ -159,13 +158,14 @@ void ALNS_QLearning::exportMetrics(const std::string& filename) {
         std::cerr << "Error al abrir archivo para metricas: " << filename << std::endl;
         return;
     }
-    file << "iter,best_veh,best_dist,curr_veh,curr_dist,d_op,r_op,reward,temp";
+    file << "iter,state,best_veh,best_dist,curr_veh,curr_dist,d_op,r_op,reward,temp";
     for (size_t i = 0; i < destroy_ops.size(); ++i) file << ",d_weight_" << i;
     for (size_t i = 0; i < repair_ops.size(); ++i) file << ",r_weight_" << i;
     file << "\n";
     
     for (const auto& data : history) {
         file << data.iter << ","
+             << data.state << ","
              << data.best_vehicles << ","
              << data.best_distance << ","
              << data.curr_vehicles << ","
@@ -178,6 +178,23 @@ void ALNS_QLearning::exportMetrics(const std::string& filename) {
         for (double w : data.r_weights) file << "," << w;
         file << "\n";
     }
+
+    file << "\n# MATRIZ_Q_DESTRUCCION\n";
+    file << "Estado,Random,Route,Worst,Shaw\n";
+    for (int s = 0; s < num_states; ++s) {
+        file << s;
+        for (double val : Q_destroy_best[s]) file << "," << val;
+        file << "\n";
+    }
+
+    file << "\n# MATRIZ_Q_REPARACION\n";
+    file << "Estado,Greedy,Regret-2,Regret-3,Perturbed\n";
+    for (int s = 0; s < num_states; ++s) {
+        file << s;
+        for (double val : Q_repair_best[s]) file << "," << val;
+        file << "\n";
+    }
+
     file.close();
     std::cout << "-> Metricas exportadas a " << filename << "\n";
 }
