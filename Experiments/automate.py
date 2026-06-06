@@ -4,13 +4,13 @@ import time
 import glob
 import csv
 
-EXEC_PATH = "../build/ALNS_vrptw.exe"
+EXEC_PATH = "../build/Release/ALNS_VRPTW.exe"
 BENCHMARK_DIR = "../solomon-100"
 RESULTS_DIR = "../Results"
 
-ALGORITMOS = ["CLASSIC", "QLEARNING"]
+ALGORITMOS = ["CLASSIC", "QLEARNING", "DQN"]
 ITERACIONES = 25000
-RUNS = 10
+RUNS = 5
 
 def preparar_directorios():
     print("Verificando estructura de directorios...")
@@ -81,16 +81,9 @@ def ejecutar_experimentos():
 
     end_total = time.time()
 
-    csv_path = os.path.join(RESULTS_DIR, "tiempos_ejecucion_limpios.csv")
-    with open(csv_path, mode='w', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=["Instancia", "Algoritmo", "Run", "Tiempo_s"])
-        writer.writeheader()
-        writer.writerows(registro_tiempos)
-
     horas, rem = divmod(end_total - start_total, 3600)
     minutos, segundos = divmod(rem, 60)
     print(f"\n=== Experimentos terminados en {int(horas)}h {int(minutos)}m {segundos:.2f}s ===")
-    print(f"-> Archivo de tiempos guardado con éxito en: {csv_path}")
 
 if __name__ == "__main__":
     ejecutar_experimentos()
