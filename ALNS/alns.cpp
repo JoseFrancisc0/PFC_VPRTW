@@ -78,7 +78,12 @@ Solution ALNS::solve(int max_iters) {
     int q_max = std::max(q_min + 1, static_cast<int>(0.4 * n_customers));
     std::uniform_int_distribution<int> q_distr(q_min, q_max);
 
+    int iters_without_improvement = 0;
+
     for (int iter = 0; iter < max_iters; ++iter) {
+        // 1. Extraer estado actual
+        std::vector<float> current_state = current_sol.extract_state_features(iters_without_improvement, iter, max_iters);
+
         Solution candidate = current_sol;
         int q = q_distr(rng); // Grado de destruccion (cuantos clientes se busca eliminar)
 
@@ -101,6 +106,7 @@ Solution ALNS::solve(int max_iters) {
             best_sol = candidate;
             current_sol = candidate;
             score = w1;
+            iters_without_improvement = 0;
         }
         else if (cand_cost == best_cost) {
             // Si empata con el mejor global
@@ -111,6 +117,7 @@ Solution ALNS::solve(int max_iters) {
             // Nuevo mejor actual
             current_sol = candidate;
             score = w2;
+            iters_without_improvement = 0;
         }
         else if (accept(cand_cost, curr_cost, T)) {
             // Solucion aceptada 
@@ -119,6 +126,7 @@ Solution ALNS::solve(int max_iters) {
         }
         else {
             // Mala solucion
+            iters_without_improvement++;
         }
 
         // Actualizacion de pesos
@@ -139,6 +147,17 @@ Solution ALNS::solve(int max_iters) {
         data.r_weights = repair_weights;
 
         history.emplace_back(data);
+
+        // 2. Extraer estado siguiente
+        std::vector<float> next_state = current_sol.extract_state_features(iters_without_improvement, iter + 1, max_iters);
+
+        // 3. Guardar experiencia
+        ExperienceRecord exp;
+        exp.state = current_state;
+        exp.action = d_idx * repair_ops.size() + r_idx; // Accion aplanada
+        exp.reward = score;
+        exp.next_state = next_state;
+        experiences.emplace_back(exp);
 
         // Actualizacion de temperatura
         T = T * cooling_rate;
@@ -178,4 +197,33 @@ void ALNS::exportMetrics(const std::string& filename) {
 
     file.close();
     std::cout << "-> Metricas exportadas a " << filename << "\n";
+}
+
+void ALNS::exportExperiences(const std::string& filename) {
+    if (experiences.empty() || filename.empty()) return;
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error al abrir archivo para experiencias: " << filename << std::endl;
+        return;
+    }
+
+    // Header: s_0..s_104, action, reward, ns_0..ns_104
+    for(int i=0; i<105; ++i) file << "s_" << i << ",";
+    file << "action,reward,";
+    for(int i=0; i<105; ++i) {
+        file << "ns_" << i << (i == 104 ? "" : ",");
+    }
+    file << "\n";
+
+    for (const auto& exp : experiences) {
+        for(float v : exp.state) file << v << ",";
+        file << exp.action << "," << exp.reward << ",";
+        for(size_t i=0; i<exp.next_state.size(); ++i) {
+            file << exp.next_state[i] << (i == exp.next_state.size() - 1 ? "" : ",");
+        }
+        file << "\n";
+    }
+
+    file.close();
+    std::cout << "-> Dataset de experiencias exportado a " << filename << "\n";
 }

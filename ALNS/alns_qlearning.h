@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <numeric>
 #include <random> 
+#include <deque>
 #include "../Operators/operators.h"
 
 struct IterationDataQL {
@@ -20,8 +21,7 @@ struct IterationDataQL {
     int r_idx;
     double reward;
     double temp;
-    std::vector<double> d_weights;
-    std::vector<double> r_weights;
+    double epsilon;
 };
 
 using DestroyOp = std::function<void(Solution&, int)>;
@@ -41,20 +41,24 @@ class ALNS_QLearning {
         std::vector<DestroyOp> destroy_ops;
         std::vector<RepairOp> repair_ops;
 
+        // HIPERPARÁMETROS CALIBRADOS
         double start_temp;
-        double cooling_rate = 0.9995;
-        double w1 = 33.0, w2 = 13.0, w3 = 9.0, w4 = 0.0;
-        double alpha = 0.1; 
+        double cooling_rate = 0.9998; // Enfriamiento simulado estándar
+        
+        // Recompensas acotadas para no saturar la función Softmax
+        double w1 = 10.0;  // Óptimo global
+        double w2 = 5.0;   // Mejora local
+        double w3 = 2.0;   // Solución aceptada
+        double w4 = 0.0;   // Solución rechazada
+        
+        double alpha = 0.05; 
         double gamma = 0.8; 
         int num_states = 3;
-        std::vector<std::vector<double>> Q_destroy;
-        std::vector<std::vector<double>> Q_repair;
+        std::vector<std::vector<double>> Q_table;
 
         void initOps();
         bool accept(double cand_cost, double curr_cost, double current_temp);
-
-        std::vector<double> getSoftmaxProbabilities(const std::vector<double>& q_values, double tau);
-        int selectOp(const std::vector<double>& probs);
+        int selectPair(const std::vector<double>& q_values, double epsilon);
 };
 
 #endif

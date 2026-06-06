@@ -132,6 +132,74 @@ void Solution::generateInitialSolution() {
 
 // Calcular costos de solucion
 double cost(const Solution& sol) {
-    const double VEHICLE_COST = 10000.0;
+    const double VEHICLE_COST = 50000.0;
     return (sol.used_vehicles * VEHICLE_COST) + sol.total_distance;
+}
+
+// Extraer vector de estado (Generalizado) para DQN
+std::vector<float> Solution::extract_state_features(int iters_without_improvement, int current_iter, int max_iters) const {
+    std::vector<float> state(105, 0.0f);
+    
+    // 0: Iteraciones sin mejora normalizadas
+    state[0] = std::min(1.0f, static_cast<float>(iters_without_improvement) / 2000.0f);
+    
+    // 1: Progreso total del algoritmo
+    state[1] = static_cast<float>(current_iter) / static_cast<float>(max_iters);
+    
+    // 2: Promedio de utilizacion de capacidad
+    double total_load = 0.0;
+    int num_routes = 0;
+    for(const auto& r : routes) {
+        if(r.path.size() > 2) {
+            total_load += r.load;
+            num_routes++;
+        }
+    }
+    state[2] = (num_routes > 0) ? static_cast<float>(total_load / (num_routes * inst.capacity)) : 0.0f;
+    
+    // 3: Varianza del tamaño de rutas
+    double mean_size = 0.0;
+    if(num_routes > 0) {
+        for(const auto& r : routes) {
+            if(r.path.size() > 2) mean_size += (r.path.size() - 2); // Clientes unicamente
+        }
+        mean_size /= num_routes;
+        
+        double var_size = 0.0;
+        for(const auto& r : routes) {
+            if(r.path.size() > 2) {
+                double diff = (r.path.size() - 2) - mean_size;
+                var_size += diff * diff;
+            }
+        }
+        var_size /= num_routes;
+        state[3] = static_cast<float>(var_size / 100.0); // Normalizado ad hoc
+    } else {
+        state[3] = 0.0f;
+    }
+    
+    // 4: Fraccion de clientes no asignados
+    state[4] = static_cast<float>(unassigned.size()) / 100.0f;
+    
+    // 5-104: Posicion relativa de cada cliente (1 a 100)
+    // Inicializar todo a -1.0 (no asignado)
+    for(int i = 5; i < 105; ++i) {
+        state[i] = -1.0f;
+    }
+    
+    for(const auto& r : routes) {
+        if(r.path.size() > 2) {
+            int num_clients = r.path.size() - 2;
+            for(size_t i = 1; i < r.path.size() - 1; ++i) {
+                int client_idx = r.path[i];
+                if(client_idx >= 1 && client_idx <= 100) {
+                    // Posicion relativa: de 0.0 (primero) a 1.0 (ultimo)
+                    float relative_pos = (num_clients > 1) ? static_cast<float>(i - 1) / (num_clients - 1) : 0.5f;
+                    state[4 + client_idx] = relative_pos;
+                }
+            }
+        }
+    }
+    
+    return state;
 }

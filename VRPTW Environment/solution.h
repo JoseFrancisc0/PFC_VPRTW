@@ -27,6 +27,7 @@ class Solution {
         Solution& operator=(const Solution& other);
 
         void updateMetrics();
+        std::vector<float> extract_state_features(int iters_without_improvement, int current_iter, int max_iters) const;
 
     private:
         void generateInitialSolution();

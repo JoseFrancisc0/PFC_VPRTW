@@ -22,6 +22,13 @@ struct IterationData {
     std::vector<double> r_weights;
 };
 
+struct ExperienceRecord {
+    std::vector<float> state;
+    int action;
+    double reward;
+    std::vector<float> next_state;
+};
+
 using DestroyOp = std::function<void(Solution&, int)>;
 using RepairOp  = std::function<void(Solution&)>;
 
@@ -30,6 +37,7 @@ class ALNS {
         ALNS(const Instance& _inst, const Solution& _initial_sol);
         Solution solve(int max_iters);
         void exportMetrics(const std::string& filename);
+        void exportExperiences(const std::string& filename);
 
     private:
         const Instance& inst;
@@ -37,6 +45,7 @@ class ALNS {
         Solution best_sol;
 
         std::vector<IterationData> history; // para guardar metricas
+        std::vector<ExperienceRecord> experiences; // para Dataset DQN
 
         // Operadores de destroy (Omega^-)
         std::vector<DestroyOp> destroy_ops;

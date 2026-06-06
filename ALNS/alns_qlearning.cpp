@@ -14,36 +14,33 @@ void ALNS_QLearning::initOps() {
     destroy_ops.push_back(routeRemoval);
     destroy_ops.push_back([](Solution& sol, int q) { worstRemoval(sol, q); });
     destroy_ops.push_back([](Solution& sol, int q) { shawRemoval(sol, q); });
+    destroy_ops.push_back([](Solution& sol, int q) { timeWindowRemoval(sol, q); });
 
     repair_ops.push_back(greedyInsertion);
     repair_ops.push_back(regret2Insertion);
     repair_ops.push_back(regret3Insertion);
     repair_ops.push_back([](Solution& sol) { pGreedyInsertion(sol); });
 
-    // 0: Mejorando, 1: Estancado, 2: Atrapado
     num_states = 3; 
-    Q_destroy.assign(num_states, std::vector<double>(destroy_ops.size(), 50.0));
-    Q_repair.assign(num_states, std::vector<double>(repair_ops.size(), 50.0));
+    // Matriz única combinando todas las posibles parejas de (destroy_op, repair_op)
+    Q_table.assign(num_states, std::vector<double>(destroy_ops.size() * repair_ops.size(), 10.0));
 }
 
-std::vector<double> ALNS_QLearning::getSoftmaxProbabilities(const std::vector<double>& q_values, double tau) {
-    std::vector<double> probs(q_values.size());
-    double max_q = *std::max_element(q_values.begin(), q_values.end());
-    double sum = 0.0;
-    
-    for (size_t i = 0; i < q_values.size(); ++i) {
-        probs[i] = std::exp((q_values[i] - max_q) / tau);
-        sum += probs[i];
+int ALNS_QLearning::selectPair(const std::vector<double>& q_values, double epsilon) {
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+    if (dist(rng) < epsilon) {
+        std::uniform_int_distribution<int> rand_action(0, q_values.size() - 1);
+        return rand_action(rng);
     }
-    for (size_t i = 0; i < probs.size(); ++i) {
-        probs[i] /= sum;
+    int best_a = 0;
+    double max_val = q_values[0];
+    for(size_t i = 1; i < q_values.size(); i++){
+        if(q_values[i] > max_val){
+            max_val = q_values[i];
+            best_a = i;
+        }
     }
-    return probs;
-}
-
-int ALNS_QLearning::selectOp(const std::vector<double>& probs) {
-    std::discrete_distribution<int> distr(probs.begin(), probs.end());
-    return distr(rng);
+    return best_a;
 }
 
 bool ALNS_QLearning::accept(double cand_cost, double curr_cost, double T) {
@@ -56,12 +53,17 @@ bool ALNS_QLearning::accept(double cand_cost, double curr_cost, double T) {
 
 Solution ALNS_QLearning::solve(int max_iters) {
     double initial_d = current_sol.total_distance;
-    start_temp = -(0.1 * initial_d) / std::log(0.5);
+    // Ajuste: Temperatura inicial más suave para no destruir buenas rutas iniciales
+    start_temp = -(0.05 * initial_d) / std::log(0.5);
     double T = start_temp;
     
-    double tau = 5.0;  
-    double tau_min = 0.1;  
-    double tau_cooling = 0.9998;
+    // Ajuste E-Greedy
+    double epsilon = 0.5;  
+    double epsilon_min = 0.05;  
+    double epsilon_decay = 0.9995;
+
+    struct ActionRecord { int state; int action; };
+    std::deque<ActionRecord> action_buffer;
 
     int n_customers = inst.clients.size() - 1;
     history.reserve(max_iters);
@@ -69,19 +71,26 @@ Solution ALNS_QLearning::solve(int max_iters) {
     int current_state = 0; 
     int iters_without_improvement = 0;
 
-    int q_min = std::max(4, static_cast<int>(0.10 * n_customers));
-    int q_max = std::max(q_min + 1, static_cast<int>(0.4 * n_customers));
-    std::uniform_int_distribution<int> q_distr(q_min, q_max);
-
     for (int iter = 0; iter < max_iters; ++iter) {
         Solution candidate = current_sol;
+        
+        int q_min, q_max;
+        if (current_state == 0) { 
+            q_min = std::max(4, static_cast<int>(0.10 * n_customers));
+            q_max = std::max(q_min + 1, static_cast<int>(0.15 * n_customers));
+        } else if (current_state == 1) { 
+            q_min = std::max(4, static_cast<int>(0.15 * n_customers));
+            q_max = std::max(q_min + 1, static_cast<int>(0.20 * n_customers));
+        } else { 
+            q_min = std::max(4, static_cast<int>(0.20 * n_customers));
+            q_max = std::max(q_min + 1, static_cast<int>(0.25 * n_customers));
+        }
+        std::uniform_int_distribution<int> q_distr(q_min, q_max);
         int q = q_distr(rng);
         
-        std::vector<double> d_probs = getSoftmaxProbabilities(Q_destroy[current_state], tau);
-        std::vector<double> r_probs = getSoftmaxProbabilities(Q_repair[current_state], tau);
-        
-        int d_idx = selectOp(d_probs);
-        int r_idx = selectOp(r_probs);
+        int action = selectPair(Q_table[current_state], epsilon);
+        int d_idx = action / repair_ops.size();
+        int r_idx = action % repair_ops.size();
         
         destroy_ops[d_idx](candidate, q);
         repair_ops[r_idx](candidate);
@@ -93,43 +102,70 @@ Solution ALNS_QLearning::solve(int max_iters) {
         double curr_cost = cost(current_sol);
         double best_cost = cost(best_sol);
 
-        if (cand_cost < best_cost) {
+        // EVALUACIÓN JERÁRQUICA: 1. Minimizar Vehículos, 2. Minimizar Distancia
+        bool vehicle_reduced = candidate.used_vehicles < best_sol.used_vehicles;
+        bool distance_improved = (candidate.used_vehicles == best_sol.used_vehicles && cand_cost < best_cost);
+
+        if (vehicle_reduced || distance_improved) {
             best_sol = candidate;
             current_sol = candidate;
-            reward = w1; 
+            // Doble recompensa si logra reducir un vehículo
+            reward = vehicle_reduced ? w1 * 2.0 : w1; 
             global_improved = true;
+            iters_without_improvement = 0;
         }
-        else if (cand_cost < curr_cost) {
+        else if (candidate.used_vehicles < current_sol.used_vehicles || 
+                (candidate.used_vehicles == current_sol.used_vehicles && cand_cost < curr_cost)) {
             current_sol = candidate;
             reward = w2; 
+            iters_without_improvement = 0;
         }
-        else if (cand_cost == best_cost) {
+        else if (cand_cost == best_cost && candidate.used_vehicles == best_sol.used_vehicles) {
             current_sol = candidate;
             reward = w2;
+            iters_without_improvement++; 
         }
         else if (accept(cand_cost, curr_cost, T)) { 
-            current_sol = candidate;
-            reward = w3; 
-        }
-
-        if (cand_cost < curr_cost || cand_cost < best_cost) {
-            iters_without_improvement = 0;
+            if(candidate.used_vehicles <= current_sol.used_vehicles) {
+                current_sol = candidate;
+                reward = w3; 
+            } else {
+                // Penalización severa por empeorar vehículos y ser aceptada probabilísticamente
+                reward = -5.0; 
+            }
+            iters_without_improvement++;
         } else {
+            if(candidate.used_vehicles > current_sol.used_vehicles) {
+                // Penalización moderada por proponer una mala ruta y ser rechazada
+                reward = -2.0;
+            }
             iters_without_improvement++;
         }
 
-        int next_state = 0; // Mejorando
-        if (iters_without_improvement > 150) {
-            next_state = 2; // Atrapado
-        } else if (iters_without_improvement > 50) {
-            next_state = 1; // Estancado
+        // Reheating adaptado a epsilon
+        int next_state = 0; 
+        if (iters_without_improvement > 300) {
+            next_state = 2; 
+            if (iters_without_improvement > 1500) {
+                T = start_temp; 
+                epsilon = 0.5; // Resetear exploracion
+                iters_without_improvement = 0;
+            }
+        } else if (iters_without_improvement > 100) {
+            next_state = 1; 
         }
 
-        double max_next_q_d = *std::max_element(Q_destroy[next_state].begin(), Q_destroy[next_state].end());
-        Q_destroy[current_state][d_idx] += alpha * (reward + gamma * max_next_q_d - Q_destroy[current_state][d_idx]);
+        // N-Step Reward Buffer Update
+        action_buffer.push_back({current_state, action});
+        if(action_buffer.size() > 5) action_buffer.pop_front();
 
-        double max_next_q_r = *std::max_element(Q_repair[next_state].begin(), Q_repair[next_state].end());
-        Q_repair[current_state][r_idx] += alpha * (reward + gamma * max_next_q_r - Q_repair[current_state][r_idx]);
+        double max_next_q = *std::max_element(Q_table[next_state].begin(), Q_table[next_state].end());
+        for (size_t i = 0; i < action_buffer.size(); ++i) {
+            int s = action_buffer[i].state;
+            int a = action_buffer[i].action;
+            double discount = std::pow(gamma, action_buffer.size() - 1 - i);
+            Q_table[s][a] += alpha * ((reward * discount) + gamma * max_next_q - Q_table[s][a]);
+        }
 
         current_state = next_state;
         
@@ -143,12 +179,11 @@ Solution ALNS_QLearning::solve(int max_iters) {
         data.r_idx = r_idx;
         data.reward = reward; 
         data.temp = T;
-        data.d_weights = d_probs; 
-        data.r_weights = r_probs; 
+        data.epsilon = epsilon; 
         history.emplace_back(data);
         
-        T = T * cooling_rate; // Cierra la aceptacion de peores rutas
-        tau = std::max(tau_min, tau * tau_cooling); // Cierra la exploracion de operadores al azar
+        T = T * cooling_rate; 
+        epsilon = std::max(epsilon_min, epsilon * epsilon_decay); 
     }
     return best_sol;
 }
@@ -159,10 +194,7 @@ void ALNS_QLearning::exportMetrics(const std::string& filename) {
         std::cerr << "Error al abrir archivo para metricas: " << filename << std::endl;
         return;
     }
-    file << "iter,best_veh,best_dist,curr_veh,curr_dist,d_op,r_op,reward,temp";
-    for (size_t i = 0; i < destroy_ops.size(); ++i) file << ",d_weight_" << i;
-    for (size_t i = 0; i < repair_ops.size(); ++i) file << ",r_weight_" << i;
-    file << "\n";
+    file << "iter,best_veh,best_dist,curr_veh,curr_dist,d_op,r_op,reward,temp,epsilon\n";
     
     for (const auto& data : history) {
         file << data.iter << ","
@@ -173,10 +205,8 @@ void ALNS_QLearning::exportMetrics(const std::string& filename) {
              << data.d_idx << ","
              << data.r_idx << ","
              << data.reward << ","
-             << data.temp;
-        for (double w : data.d_weights) file << "," << w;
-        for (double w : data.r_weights) file << "," << w;
-        file << "\n";
+             << data.temp << ","
+             << data.epsilon << "\n";
     }
     file.close();
     std::cout << "-> Metricas exportadas a " << filename << "\n";
