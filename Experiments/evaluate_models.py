@@ -11,7 +11,7 @@ def cargar_resultados():
     instancias_comunes = set()
     
     for algo in ALGORITMOS:
-        filename = f"{algo}_Evaluation_vs_SINTEF.csv"
+        filename = f"{algo}_Execution_Results.csv"
         if not os.path.exists(filename):
             print(f"[ERROR] No se encontro {filename}. Ejecuta automate.py primero.")
             continue
