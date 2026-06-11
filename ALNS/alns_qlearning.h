@@ -30,7 +30,7 @@ using RepairOp  = std::function<void(Solution&)>;
 class ALNS_QLearning {
     public:
         ALNS_QLearning(const Instance& _inst, const Solution& _initial_sol);
-        Solution solve(int max_iters);
+        Solution solve(int max_iters, bool save_history = false);
         void exportMetrics(const std::string& filename);
 
     private:
@@ -45,20 +45,16 @@ class ALNS_QLearning {
         double start_temp;
         double cooling_rate = 0.9998; // Enfriamiento simulado estándar
         
-        // Recompensas acotadas para no saturar la función Softmax
-        double w1 = 10.0;  // Óptimo global
-        double w2 = 5.0;   // Mejora local
-        double w3 = 2.0;   // Solución aceptada
-        double w4 = 0.0;   // Solución rechazada
-        
         double alpha = 0.05; 
         double gamma = 0.8; 
-        int num_states = 3;
-        std::vector<std::vector<double>> Q_table;
+        int num_states = 6;
+        std::vector<std::vector<double>> Q_table_D;
+        std::vector<std::vector<double>> Q_table_R;
 
         void initOps();
         bool accept(double cand_cost, double curr_cost, double current_temp);
-        int selectPair(const std::vector<double>& q_values, double epsilon);
+        int selectOp(const std::vector<double>& q_values, double tau);
+        int getState(int iters_without_improvement, const Solution& sol) const;
 };
 
 #endif

@@ -35,7 +35,7 @@ using RepairOp  = std::function<void(Solution&)>;
 class ALNS {
     public:
         ALNS(const Instance& _inst, const Solution& _initial_sol);
-        Solution solve(int max_iters);
+        Solution solve(int max_iters, bool generate_data = false);
         void exportMetrics(const std::string& filename);
         void exportExperiences(const std::string& filename);
 

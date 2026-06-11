@@ -67,7 +67,7 @@ void ALNS::updateWeights(int used_destroy_idx, int used_repair_idx, double score
         repair_weights[used_repair_idx] = 0.01;
 }
 
-Solution ALNS::solve(int max_iters) {
+Solution ALNS::solve(int max_iters, bool generate_data) {
     double initial_d = current_sol.total_distance;
     start_temp = -(0.10 * initial_d) / std::log(0.5);
     double T = start_temp;
@@ -82,7 +82,10 @@ Solution ALNS::solve(int max_iters) {
 
     for (int iter = 0; iter < max_iters; ++iter) {
         // 1. Extraer estado actual
-        std::vector<float> current_state = current_sol.extract_state_features(iters_without_improvement, iter, max_iters);
+        std::vector<float> current_state;
+        if (generate_data) {
+            current_state = current_sol.extract_state_features(iters_without_improvement, iter, max_iters);
+        }
 
         Solution candidate = current_sol;
         int q = q_distr(rng); // Grado de destruccion (cuantos clientes se busca eliminar)
@@ -133,31 +136,33 @@ Solution ALNS::solve(int max_iters) {
         updateWeights(d_idx, r_idx, score);
 
         // Guardando metricas de la iteracion actual
-        IterationData data;
-        data.iter = iter;
-        data.best_vehicles = best_sol.used_vehicles;
-        data.best_distance = best_sol.total_distance;
-        data.curr_vehicles = current_sol.used_vehicles;
-        data.curr_distance = current_sol.total_distance;
-        data.d_idx = d_idx;
-        data.r_idx = r_idx;
-        data.score = score;
-        data.temp = T;
-        data.d_weights = destroy_weights;
-        data.r_weights = repair_weights;
+        if (generate_data) {
+            IterationData data;
+            data.iter = iter;
+            data.best_vehicles = best_sol.used_vehicles;
+            data.best_distance = best_sol.total_distance;
+            data.curr_vehicles = current_sol.used_vehicles;
+            data.curr_distance = current_sol.total_distance;
+            data.d_idx = d_idx;
+            data.r_idx = r_idx;
+            data.score = score;
+            data.temp = T;
+            data.d_weights = destroy_weights;
+            data.r_weights = repair_weights;
 
-        history.emplace_back(data);
+            history.emplace_back(data);
 
-        // 2. Extraer estado siguiente
-        std::vector<float> next_state = current_sol.extract_state_features(iters_without_improvement, iter + 1, max_iters);
+            // 2. Extraer estado siguiente
+            std::vector<float> next_state = current_sol.extract_state_features(iters_without_improvement, iter + 1, max_iters);
 
-        // 3. Guardar experiencia
-        ExperienceRecord exp;
-        exp.state = current_state;
-        exp.action = d_idx * repair_ops.size() + r_idx; // Accion aplanada
-        exp.reward = score;
-        exp.next_state = next_state;
-        experiences.emplace_back(exp);
+            // 3. Guardar experiencia
+            ExperienceRecord exp;
+            exp.state = current_state;
+            exp.action = d_idx * repair_ops.size() + r_idx; // Accion aplanada
+            exp.reward = score;
+            exp.next_state = next_state;
+            experiences.emplace_back(exp);
+        }
 
         // Actualizacion de temperatura
         T = T * cooling_rate;

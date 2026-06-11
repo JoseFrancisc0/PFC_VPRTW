@@ -41,7 +41,7 @@ bool ALNS_DQN::accept(double cand_cost, double curr_cost, double T) {
     return distr(rng) < prob; 
 }
 
-Solution ALNS_DQN::solve(int max_iters) {
+Solution ALNS_DQN::solve(int max_iters, bool save_history) {
     double initial_d = current_sol.total_distance;
     start_temp = -(0.05 * initial_d) / std::log(0.5);
     double T = start_temp;
@@ -140,16 +140,18 @@ Solution ALNS_DQN::solve(int max_iters) {
             iters_without_improvement = 0;
         }
 
-        IterationDataDQN data;
-        data.iter = iter;
-        data.best_vehicles = best_sol.used_vehicles;
-        data.best_distance = best_sol.total_distance;
-        data.curr_vehicles = current_sol.used_vehicles;
-        data.curr_distance = current_sol.total_distance;
-        data.d_idx = d_idx;
-        data.r_idx = r_idx;
-        data.temp = T;
-        history.emplace_back(data);
+        if (save_history) {
+            IterationDataDQN data;
+            data.iter = iter;
+            data.best_vehicles = best_sol.used_vehicles;
+            data.best_distance = best_sol.total_distance;
+            data.curr_vehicles = current_sol.used_vehicles;
+            data.curr_distance = current_sol.total_distance;
+            data.d_idx = d_idx;
+            data.r_idx = r_idx;
+            data.temp = T;
+            history.emplace_back(data);
+        }
         
         T = T * cooling_rate; 
     }
@@ -181,7 +183,9 @@ void ALNS_DQN::exportMetrics(const std::string& filename) {
 Solution solve_with_dqn(const Instance& inst, const Solution& initial_sol, int max_iterations, const std::string& metrics_csv, const std::string& routes_csv) {
     std::cout << "[3] Iniciando ALNS con DQN por " << max_iterations << " iteraciones...\n";
     ALNS_DQN dqn(inst, initial_sol, "DQN_Pipeline/alns_dqn_expert.pt");
-    Solution best = dqn.solve(max_iterations);
+    
+    bool save_history = !metrics_csv.empty();
+    Solution best = dqn.solve(max_iterations, save_history);
     
     if (!metrics_csv.empty()) dqn.exportMetrics(metrics_csv);
     if (!routes_csv.empty()) exportSolutionRoutes(best, routes_csv);

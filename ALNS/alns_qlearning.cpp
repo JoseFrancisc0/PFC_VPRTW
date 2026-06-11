@@ -21,26 +21,39 @@ void ALNS_QLearning::initOps() {
     repair_ops.push_back(regret3Insertion);
     repair_ops.push_back([](Solution& sol) { pGreedyInsertion(sol); });
 
-    num_states = 3; 
-    // Matriz única combinando todas las posibles parejas de (destroy_op, repair_op)
-    Q_table.assign(num_states, std::vector<double>(destroy_ops.size() * repair_ops.size(), 10.0));
+    num_states = 6; 
+    // Tablas separadas para Destrucción y Reparación
+    Q_table_D.assign(num_states, std::vector<double>(destroy_ops.size(), 10.0));
+    Q_table_R.assign(num_states, std::vector<double>(repair_ops.size(), 10.0));
 }
 
-int ALNS_QLearning::selectPair(const std::vector<double>& q_values, double epsilon) {
-    std::uniform_real_distribution<double> dist(0.0, 1.0);
-    if (dist(rng) < epsilon) {
-        std::uniform_int_distribution<int> rand_action(0, q_values.size() - 1);
-        return rand_action(rng);
-    }
-    int best_a = 0;
-    double max_val = q_values[0];
-    for(size_t i = 1; i < q_values.size(); i++){
-        if(q_values[i] > max_val){
-            max_val = q_values[i];
-            best_a = i;
+int ALNS_QLearning::getState(int iters_without_improvement, const Solution& sol) const {
+    int stag_level = 0;
+    if (iters_without_improvement > 300) stag_level = 2;
+    else if (iters_without_improvement > 100) stag_level = 1;
+
+    double total_load = 0.0;
+    int num_routes = 0;
+    for (const auto& r : sol.routes) {
+        if (r.path.size() > 2) {
+            total_load += r.load;
+            num_routes++;
         }
     }
-    return best_a;
+    double capacity_util = (num_routes > 0) ? (total_load / (num_routes * inst.capacity)) : 0.0;
+    int cap_level = (capacity_util >= 0.75) ? 1 : 0;
+
+    return stag_level * 2 + cap_level;
+}
+
+int ALNS_QLearning::selectOp(const std::vector<double>& q_values, double tau) {
+    double max_q = *std::max_element(q_values.begin(), q_values.end());
+    std::vector<double> probs(q_values.size());
+    for (size_t i = 0; i < q_values.size(); ++i) {
+        probs[i] = std::exp((q_values[i] - max_q) / tau);
+    }
+    std::discrete_distribution<int> dist(probs.begin(), probs.end());
+    return dist(rng);
 }
 
 bool ALNS_QLearning::accept(double cand_cost, double curr_cost, double T) {
@@ -51,34 +64,35 @@ bool ALNS_QLearning::accept(double cand_cost, double curr_cost, double T) {
     return distr(rng) < prob; 
 }
 
-Solution ALNS_QLearning::solve(int max_iters) {
+Solution ALNS_QLearning::solve(int max_iters, bool save_history) {
     double initial_d = current_sol.total_distance;
     // Ajuste: Temperatura inicial más suave para no destruir buenas rutas iniciales
     start_temp = -(0.05 * initial_d) / std::log(0.5);
     double T = start_temp;
     
-    // Ajuste E-Greedy
-    double epsilon = 0.5;  
-    double epsilon_min = 0.05;  
-    double epsilon_decay = 0.9995;
+    // Softmax temperature
+    double tau = 5.0;  
+    double tau_min = 0.1;  
+    double tau_decay = 0.9995;
 
-    struct ActionRecord { int state; int action; };
+    struct ActionRecord { int state; int d_action; int r_action; };
     std::deque<ActionRecord> action_buffer;
 
     int n_customers = inst.clients.size() - 1;
     history.reserve(max_iters);
 
-    int current_state = 0; 
     int iters_without_improvement = 0;
+    int current_state = getState(iters_without_improvement, current_sol); 
 
     for (int iter = 0; iter < max_iters; ++iter) {
         Solution candidate = current_sol;
         
+        int stag_level = current_state / 2;
         int q_min, q_max;
-        if (current_state == 0) { 
+        if (stag_level == 0) { 
             q_min = std::max(4, static_cast<int>(0.10 * n_customers));
             q_max = std::max(q_min + 1, static_cast<int>(0.15 * n_customers));
-        } else if (current_state == 1) { 
+        } else if (stag_level == 1) { 
             q_min = std::max(4, static_cast<int>(0.15 * n_customers));
             q_max = std::max(q_min + 1, static_cast<int>(0.20 * n_customers));
         } else { 
@@ -88,102 +102,87 @@ Solution ALNS_QLearning::solve(int max_iters) {
         std::uniform_int_distribution<int> q_distr(q_min, q_max);
         int q = q_distr(rng);
         
-        int action = selectPair(Q_table[current_state], epsilon);
-        int d_idx = action / repair_ops.size();
-        int r_idx = action % repair_ops.size();
+        int d_idx = selectOp(Q_table_D[current_state], tau);
+        int r_idx = selectOp(Q_table_R[current_state], tau);
         
         destroy_ops[d_idx](candidate, q);
         repair_ops[r_idx](candidate);
-        
-        double reward = w4;
-        bool global_improved = false;
         
         double cand_cost = cost(candidate);
         double curr_cost = cost(current_sol);
         double best_cost = cost(best_sol);
 
-        // EVALUACIÓN JERÁRQUICA: 1. Minimizar Vehículos, 2. Minimizar Distancia
-        bool vehicle_reduced = candidate.used_vehicles < best_sol.used_vehicles;
-        bool distance_improved = (candidate.used_vehicles == best_sol.used_vehicles && cand_cost < best_cost);
+        double reward = 0.0;
+        if (candidate.used_vehicles < current_sol.used_vehicles) {
+            reward = 10.0;
+        } else if (candidate.used_vehicles > current_sol.used_vehicles) {
+            reward = -10.0;
+        } else {
+            reward = ((current_sol.total_distance - candidate.total_distance) / current_sol.total_distance) * 100.0;
+        }
 
-        if (vehicle_reduced || distance_improved) {
+        if (cand_cost < best_cost) {
             best_sol = candidate;
             current_sol = candidate;
-            // Doble recompensa si logra reducir un vehículo
-            reward = vehicle_reduced ? w1 * 2.0 : w1; 
-            global_improved = true;
             iters_without_improvement = 0;
         }
-        else if (candidate.used_vehicles < current_sol.used_vehicles || 
-                (candidate.used_vehicles == current_sol.used_vehicles && cand_cost < curr_cost)) {
+        else if (cand_cost < curr_cost) {
             current_sol = candidate;
-            reward = w2; 
             iters_without_improvement = 0;
-        }
-        else if (cand_cost == best_cost && candidate.used_vehicles == best_sol.used_vehicles) {
-            current_sol = candidate;
-            reward = w2;
-            iters_without_improvement++; 
         }
         else if (accept(cand_cost, curr_cost, T)) { 
-            if(candidate.used_vehicles <= current_sol.used_vehicles) {
-                current_sol = candidate;
-                reward = w3; 
-            } else {
-                // Penalización severa por empeorar vehículos y ser aceptada probabilísticamente
-                reward = -5.0; 
-            }
+            current_sol = candidate;
             iters_without_improvement++;
         } else {
-            if(candidate.used_vehicles > current_sol.used_vehicles) {
-                // Penalización moderada por proponer una mala ruta y ser rechazada
-                reward = -2.0;
-            }
             iters_without_improvement++;
+            reward -= 2.0; // Penalización base por solución rechazada
         }
+        
+        reward = std::max(-10.0, std::min(10.0, reward)); // Limitar para estabilidad
 
-        // Reheating adaptado a epsilon
-        int next_state = 0; 
-        if (iters_without_improvement > 300) {
-            next_state = 2; 
-            if (iters_without_improvement > 1500) {
-                T = start_temp; 
-                epsilon = 0.5; // Resetear exploracion
-                iters_without_improvement = 0;
-            }
-        } else if (iters_without_improvement > 100) {
-            next_state = 1; 
+        int next_state = getState(iters_without_improvement, current_sol); 
+        if (iters_without_improvement > 1500) {
+            T = start_temp; 
+            tau = 5.0; // Resetear exploracion
+            iters_without_improvement = 0;
+            next_state = getState(0, current_sol);
         }
 
         // N-Step Reward Buffer Update
-        action_buffer.push_back({current_state, action});
+        action_buffer.push_back({current_state, d_idx, r_idx});
         if(action_buffer.size() > 5) action_buffer.pop_front();
 
-        double max_next_q = *std::max_element(Q_table[next_state].begin(), Q_table[next_state].end());
+        double max_next_q_D = *std::max_element(Q_table_D[next_state].begin(), Q_table_D[next_state].end());
+        double max_next_q_R = *std::max_element(Q_table_R[next_state].begin(), Q_table_R[next_state].end());
+
         for (size_t i = 0; i < action_buffer.size(); ++i) {
             int s = action_buffer[i].state;
-            int a = action_buffer[i].action;
+            int d_a = action_buffer[i].d_action;
+            int r_a = action_buffer[i].r_action;
             double discount = std::pow(gamma, action_buffer.size() - 1 - i);
-            Q_table[s][a] += alpha * ((reward * discount) + gamma * max_next_q - Q_table[s][a]);
+            Q_table_D[s][d_a] += alpha * ((reward * discount) + gamma * max_next_q_D - Q_table_D[s][d_a]);
+            Q_table_R[s][r_a] += alpha * ((reward * discount) + gamma * max_next_q_R - Q_table_R[s][r_a]);
         }
 
         current_state = next_state;
         
-        IterationDataQL data;
-        data.iter = iter;
-        data.best_vehicles = best_sol.used_vehicles;
-        data.best_distance = best_sol.total_distance;
-        data.curr_vehicles = current_sol.used_vehicles;
-        data.curr_distance = current_sol.total_distance;
-        data.d_idx = d_idx;
-        data.r_idx = r_idx;
-        data.reward = reward; 
-        data.temp = T;
-        data.epsilon = epsilon; 
-        history.emplace_back(data);
+        if (save_history) {
+            IterationDataQL data;
+            data.iter = iter;
+            data.best_vehicles = best_sol.used_vehicles;
+            data.best_distance = best_sol.total_distance;
+            data.curr_vehicles = current_sol.used_vehicles;
+            data.curr_distance = current_sol.total_distance;
+            data.d_idx = d_idx;
+            data.r_idx = r_idx;
+            data.reward = reward; 
+            data.temp = T;
+            data.epsilon = tau; 
+            history.emplace_back(data);
+        }
         
         T = T * cooling_rate; 
-        epsilon = std::max(epsilon_min, epsilon * epsilon_decay); 
+        tau = std::max(tau_min, tau * tau_decay); 
     }
     return best_sol;
 }

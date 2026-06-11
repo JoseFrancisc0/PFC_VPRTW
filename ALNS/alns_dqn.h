@@ -29,7 +29,7 @@ using RepairOp  = std::function<void(Solution&)>;
 class ALNS_DQN {
     public:
         ALNS_DQN(const Instance& _inst, const Solution& _initial_sol, const std::string& model_path);
-        Solution solve(int max_iters);
+        Solution solve(int max_iters, bool save_history = false);
         void exportMetrics(const std::string& filename);
 
     private:

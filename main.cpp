@@ -31,8 +31,8 @@ int test_benchmark() {
         auto start_time = std::chrono::high_resolution_clock::now();
     
         // Elige uno
-        Solution best_solution = solve_with_classic(inst, initial_sol, max_iterations, "Results/alns_metrics.csv");
-        // Solution best_solution = solve_with_qlearning(inst, initial_sol, max_iterations, "Results/alns_qlearning_metrics.csv");
+        // Solution best_solution = solve_with_classic(inst, initial_sol, max_iterations, "Results/alns_metrics.csv");
+        Solution best_solution = solve_with_qlearning(inst, initial_sol, max_iterations, "Results/alns_qlearning_metrics.csv");
         // Solution best_solution = solve_with_dqn(inst, initial_sol, max_iterations, "Results/alns_dqn_metrics.csv", "");
 
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -124,29 +124,39 @@ int main(int argc, char** argv) {
             std::string algorithm = argv[2]; // "CLASSIC" / "QLEARNING" / "DQN"
             int max_iters = std::stoi(argv[3]);
             std::string run_id = (argc >= 5) ? argv[4] : "0";
-
-            Instance inst(instance_file);
-            Solution initial_sol(inst);
-
+            
             size_t last_slash = instance_file.find_last_of("/\\");
             size_t last_dot = instance_file.find_last_of(".");
             std::string inst_name = instance_file.substr(last_slash + 1, last_dot - last_slash - 1);
-            
+
+            bool generate_data = false;
             std::string metrics_file = "";
             std::string routes_file = "";
             std::string exp_file = "";
 
-            if (run_id.find("NO_SAVE") == std::string::npos) {
-                metrics_file = "../Results/" + algorithm + "/metrics/" + algorithm + "_" + inst_name + "_metrics_run" + run_id + ".csv";
-                routes_file = "../Results/" + algorithm + "/routes/" + algorithm + "_" + inst_name + "_metrics_run" + run_id + ".csv";
-                exp_file = "../DQN_Pipeline/experiences/experiences_" + inst_name + "_run" + run_id + ".csv";
+            if (run_id == "GENERATE_DATA") {
+                generate_data = true;
+                metrics_file = "../Results/" + algorithm + "/metrics/" + algorithm + "_" + inst_name + "_metrics_dataset.csv";
+                exp_file = "../DQN_Pipeline/experiences/experiences_" + inst_name + "_dataset.csv";
+            }
+            else if (run_id == "BENCHMARK") {
+                // No guardamos nada en disco, solo reportamos por stdout
+            }
+            else {
+                // Modo clasico o manual que guarda por corrida
+                if (run_id.find("NO_SAVE") == std::string::npos) {
+                    metrics_file = "../Results/" + algorithm + "/metrics/" + algorithm + "_" + inst_name + "_metrics_run" + run_id + ".csv";
+                    routes_file = "../Results/" + algorithm + "/routes/" + algorithm + "_" + inst_name + "_routes_run" + run_id + ".csv";
+                }
             }
 
+            Instance inst(instance_file);
+            Solution initial_sol(inst);
             Solution best_solution(inst);
             auto start_time = std::chrono::high_resolution_clock::now();
 
             if (algorithm == "CLASSIC")
-                best_solution = solve_with_classic(inst, initial_sol, max_iters, metrics_file, routes_file, exp_file);
+                best_solution = solve_with_classic(inst, initial_sol, max_iters, metrics_file, routes_file, exp_file, generate_data);
             else if (algorithm == "QLEARNING")
                 best_solution = solve_with_qlearning(inst, initial_sol, max_iters, metrics_file, routes_file);
             else if (algorithm == "DQN")
@@ -165,6 +175,7 @@ int main(int argc, char** argv) {
             std::cout << best_solution;
             std::cout << "------------------------------------------\n";
             std::cout << "Tiempo de CPU: " << diff.count() << " segundos\n";
+            std::cout << "[FINAL_RESULT] Veh: " << best_solution.used_vehicles << ", Dist: " << best_solution.total_distance << "\n";
         } catch (const std::exception& e) {
             std::cerr << "ERROR FATAL: " << e.what() << "\n";
             return 1;

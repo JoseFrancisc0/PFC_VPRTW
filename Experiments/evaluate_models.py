@@ -1,163 +1,134 @@
 import os
-import glob
 import csv
-import re
 import matplotlib.pyplot as plt
 import numpy as np
 
-RESULTS_DIR = "../Results"
-SINTEF_CSV = "sintef.csv"
 ALGORITMOS = ["CLASSIC", "QLEARNING", "DQN"]
 CLASSES = ["c1", "c2", "r1", "r2", "rc1", "rc2"]
 
-def cargar_optimos_sintef():
-    optimos = {}
-    if not os.path.exists(SINTEF_CSV):
-        print(f"[ERROR] No se encontró {SINTEF_CSV}")
-        return optimos
-    
-    with open(SINTEF_CSV, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f, delimiter=';')
-        for row in reader:
-            inst = row['Instancia'].lower().strip()
-            veh = float(row['Vehículos'])
-            dist = float(row['Distancia'])
-            optimos[inst] = {'opt_veh': veh, 'opt_dist': dist}
-            
-    # FIX R110 typo if present
-    if 'r110' in optimos and optimos['r110']['opt_dist'] == 118.84:
-        optimos['r110']['opt_dist'] = 1118.84
-        
-    return optimos
-
-def procesar_resultados():
-    optimos = cargar_optimos_sintef()
-    instancias_sintef = list(optimos.keys())
-    
-    datos_agregados = {algo: {} for algo in ALGORITMOS}
+def cargar_resultados():
+    datos = {algo: {} for algo in ALGORITMOS}
+    instancias_comunes = set()
     
     for algo in ALGORITMOS:
-        print(f"--- Procesando datos de {algo} ---")
-        
-        for inst in sorted(instancias_sintef):
-            pattern = os.path.join(RESULTS_DIR, algo, "metrics", f"{algo}_{inst}_metrics_run*.csv")
-            metrics_files = glob.glob(pattern)
+        filename = f"{algo}_Evaluation_vs_SINTEF.csv"
+        if not os.path.exists(filename):
+            print(f"[ERROR] No se encontro {filename}. Ejecuta automate.py primero.")
+            continue
             
-            run_results = []
+        with open(filename, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                inst = row['Instancia'].lower().strip()
+                if inst:
+                    datos[algo][inst] = {
+                        'opt_veh': float(row['Opt_Veh']),
+                        'opt_dist': float(row['Opt_Dist']),
+                        'best_veh': float(row['Best_Veh']),
+                        'avg_veh': float(row['Avg_Veh']),
+                        'std_veh': float(row['Std_Veh']),
+                        'best_dist': float(row['Best_Dist']),
+                        'avg_dist': float(row['Avg_Dist']),
+                        'std_dist': float(row['Std_Dist']),
+                        'veh_gap': float(row['Veh_GAP']),
+                        'dist_gap': float(row['Dist_GAP']),
+                        'unified_gap': float(row['Unified_GAP']),
+                        'avg_time': float(row.get('Avg_Time(s)', 0.0)),
+                        'hits': 1 if float(row['Avg_Veh']) == float(row['Opt_Veh']) else 0
+                    }
+                    if algo == ALGORITMOS[0]:
+                        instancias_comunes.add(inst)
+                        
+    # Intersect
+    for algo in ALGORITMOS:
+        if datos[algo]:
+            instancias_comunes &= set(datos[algo].keys())
             
-            for mf in metrics_files:
-                match = re.search(r'_run(\d+)\.csv', mf)
-                if not match: continue
-                run_id = int(match.group(1))
-                
-                # IGNORAR corridas manuales (run0) u otras anómalas, solo nos interesan las automatizadas
-                if run_id == 0: continue 
-                
-                best_veh_run = float('inf')
-                best_dist_run = float('inf')
-                
-                try:
-                    with open(mf, 'r', encoding='utf-8') as f:
-                        reader = csv.reader(f)
-                        next(reader, None) # skip header
-                        for row in reader:
-                            if len(row) >= 3:
-                                v = float(row[1]) # best_veh
-                                d = float(row[2]) # best_dist
-                                # Guardar siempre la que tenga menos vehículos, o a igual vehículos, menor distancia
-                                if v < best_veh_run or (v == best_veh_run and d < best_dist_run):
-                                    best_veh_run = v
-                                    best_dist_run = d
-                                    
-                    if best_veh_run != float('inf'):
-                        run_results.append((best_veh_run, best_dist_run))
-                except Exception as e:
-                    print(f"Error procesando {mf}: {e}")
-                    
-            if not run_results:
-                continue
-                
-            # Ordenamiento Lexicográfico (Mejor Vehiculos, luego Mejor Distancia entre todas las corridas)
-            sorted_results = sorted(run_results, key=lambda x: (x[0], x[1]))
-            best_veh = sorted_results[0][0]
-            best_dist = sorted_results[0][1] # Esta es la "Mejor distancia PARA el menor número de vehículos"
-            
-            avg_veh = sum(r[0] for r in run_results) / len(run_results)
-            avg_dist = sum(r[1] for r in run_results) / len(run_results)
-            
-            opt_veh = optimos[inst]['opt_veh']
-            opt_dist = optimos[inst]['opt_dist']
-            
-            veh_gap = avg_veh - opt_veh
-            dist_gap = 0.0
-            if opt_dist > 0:
-                dist_gap = ((avg_dist - opt_dist) / opt_dist) * 100
-                
-            unified_gap = (veh_gap * 100) + dist_gap
-            
-            datos_agregados[algo][inst] = {
-                'avg_veh': avg_veh,
-                'avg_dist': avg_dist,
-                'best_veh': best_veh,
-                'best_dist': best_dist, # Guardado para el gráfico individual
-                'opt_veh': opt_veh,
-                'opt_dist': opt_dist,
-                'veh_gap': veh_gap,
-                'dist_gap': dist_gap,
-                'unified_gap': unified_gap,
-                'hits': 1 if avg_veh == opt_veh else 0 # Evaluacion perfecta de vehiculos
-            }
+    return datos, sorted(list(instancias_comunes))
 
-    return datos_agregados
-
-def imprimir_y_guardar_resumen(datos_agregados):
-    print("\n" + "="*70)
-    print(" VEREDICTO FINAL: ALNS CLÁSICO vs Q-LEARNING vs DQN")
-    print("="*70)
-    
-    # Encontrar instancias comunes en los 3 algoritmos
-    instancias_comunes = set(datos_agregados[ALGORITMOS[0]].keys())
-    for algo in ALGORITMOS[1:]:
-        instancias_comunes &= set(datos_agregados[algo].keys())
-    
-    instancias_comunes = sorted(list(instancias_comunes))
+def imprimir_resumen_terminal(datos, instancias_comunes):
     total_inst = len(instancias_comunes)
-    
     if total_inst == 0:
-        print("[!] No hay instancias en común entre los algoritmos para comparar.")
-        return None, None
+        return
         
+    print("\n" + "="*85)
+    print(" VEREDICTO FINAL: ALNS CLÁSICO vs Q-LEARNING vs DQN")
+    print("="*85)
     print(f"Instancias evaluadas en conjunto: {total_inst}")
-    print("-" * 70)
-    
-    resumen_graficos = {algo: {} for algo in ALGORITMOS}
+    print("-" * 85)
     
     for name in ALGORITMOS:
-        data = datos_agregados[name]
+        data = datos[name]
+        if not data: continue
         
         avg_veh_gap = sum(data[inst]['veh_gap'] for inst in instancias_comunes) / total_inst
         avg_dist_gap = sum(data[inst]['dist_gap'] for inst in instancias_comunes) / total_inst
         avg_unif_gap = sum(data[inst]['unified_gap'] for inst in instancias_comunes) / total_inst
+        avg_time = sum(data[inst]['avg_time'] for inst in instancias_comunes) / total_inst
+        avg_std_veh = sum(data[inst]['std_veh'] for inst in instancias_comunes) / total_inst
+        avg_std_dist = sum(data[inst]['std_dist'] for inst in instancias_comunes) / total_inst
         hits = sum(data[inst]['hits'] for inst in instancias_comunes)
         
+        print(f"[{name}]")
+        print(f"  - Hits de Vehículo Optimo:                    {hits}/{total_inst} ({hits/total_inst*100:.1f}%)")
+        print(f"  - Castigo de Vehículos (Media Avg_Veh_GAP):   +{avg_veh_gap:.3f} vehículos extras")
+        print(f"  - Castigo de Distancia (Media Avg_Dist_GAP):  {avg_dist_gap:.2f} % de exceso")
+        print(f"  - Variación Promedio Vehículos (Std_Veh):     {avg_std_veh:.3f}")
+        print(f"  - Variación Promedio Distancia (Std_Dist):    {avg_std_dist:.2f}")
+        print(f"  - Tiempo Promedio de Ejecución:               {avg_time:.2f} s")
+        print(f"  - GAP UNIFICADO GLOBAL (Promedio):            {avg_unif_gap:.2f} Puntos (Menor es mejor)")
+        print("-" * 85)
+
+def exportar_csv_global(datos, instancias_comunes):
+    filename = "GLOBAL_Comparison_Summary.csv"
+    with open(filename, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        
+        # Headers
+        headers = ['Instancia', 'Opt_Veh', 'Opt_Dist']
+        for algo in ALGORITMOS:
+            headers.extend([
+                f'{algo}_BestVeh', f'{algo}_StdVeh',
+                f'{algo}_BestDist', f'{algo}_StdDist',
+                f'{algo}_AvgTime', f'{algo}_UnifiedGAP'
+            ])
+        writer.writerow(headers)
+        
+        for inst in instancias_comunes:
+            # Los optimos son los mismos para todos
+            opt_veh = datos[ALGORITMOS[0]][inst]['opt_veh']
+            opt_dist = datos[ALGORITMOS[0]][inst]['opt_dist']
+            
+            row = [inst.upper(), opt_veh, opt_dist]
+            for algo in ALGORITMOS:
+                d = datos[algo][inst]
+                row.extend([
+                    d['best_veh'], f"{d['std_veh']:.3f}",
+                    f"{d['best_dist']:.2f}", f"{d['std_dist']:.2f}",
+                    f"{d['avg_time']:.2f}", f"{d['unified_gap']:.2f}"
+                ])
+            writer.writerow(row)
+            
+    print(f"-> Exportado resumen comparativo global: {filename}")
+
+def generar_graficos(datos_agregados, instancias_comunes):
+    os.makedirs("graficos", exist_ok=True)
+    total_inst = len(instancias_comunes)
+    if total_inst == 0: return
+    
+    # Calcular resumen para graficos
+    resumen_graficos = {algo: {} for algo in ALGORITMOS}
+    for name in ALGORITMOS:
+        data = datos_agregados[name]
+        avg_veh_gap = sum(data[inst]['veh_gap'] for inst in instancias_comunes) / total_inst
+        avg_dist_gap = sum(data[inst]['dist_gap'] for inst in instancias_comunes) / total_inst
+        avg_unif_gap = sum(data[inst]['unified_gap'] for inst in instancias_comunes) / total_inst
         resumen_graficos[name] = {
             'avg_veh_gap': avg_veh_gap,
             'avg_dist_gap': avg_dist_gap,
             'avg_unif_gap': avg_unif_gap
         }
         
-        print(f"[{name}]")
-        print(f"  - Hits de Vehículo Optimo:                    {hits}/{total_inst} ({hits/total_inst*100:.1f}%)")
-        print(f"  - Castigo de Vehículos (Media Avg_Veh_GAP):   +{avg_veh_gap:.3f} vehículos extras")
-        print(f"  - Castigo de Distancia (Media Avg_Dist_GAP):  {avg_dist_gap:.2f} % de exceso")
-        print(f"  - GAP UNIFICADO GLOBAL (Promedio):            {avg_unif_gap:.2f} Puntos (Menor es mejor)")
-        print("-" * 70)
-        
-    return resumen_graficos, instancias_comunes
-
-def generar_graficos(resumen_graficos, datos_agregados, instancias_comunes):
-    os.makedirs("graficos", exist_ok=True)
-    
     # 1. Gráfico Combinado (GAPs)
     labels = ALGORITMOS
     x = np.arange(len(labels))
@@ -188,7 +159,7 @@ def generar_graficos(resumen_graficos, datos_agregados, instancias_comunes):
     plt.savefig('graficos/Comparacion_GAP_General.png', bbox_inches='tight', dpi=300)
     plt.close()
     
-    # 2. Gráficos Individuales por Clase (C1, C2, R1, R2, RC1, RC2)
+    # 2. Gráficos Individuales por Clase
     for cls in CLASSES:
         insts_cls = [inst for inst in instancias_comunes if inst.startswith(cls)]
         if not insts_cls: continue
@@ -196,21 +167,37 @@ def generar_graficos(resumen_graficos, datos_agregados, instancias_comunes):
         x_inst = np.arange(len(insts_cls))
         width_cls = 0.25
         
-        fig, ax = plt.subplots(figsize=(max(10, len(insts_cls)*0.8), 6))
+        fig, ax = plt.subplots(figsize=(max(12, len(insts_cls)*1.2), 7))
         
         for i, algo in enumerate(ALGORITMOS):
             best_dists = [datos_agregados[algo][inst]['best_dist'] for inst in insts_cls]
+            best_vehs = [datos_agregados[algo][inst]['best_veh'] for inst in insts_cls]
+            opt_vehs = [datos_agregados[algo][inst]['opt_veh'] for inst in insts_cls]
+            
             offset = (i - 1) * width_cls
-            ax.bar(x_inst + offset, best_dists, width_cls, label=algo)
+            bars = ax.bar(x_inst + offset, best_dists, width_cls, label=algo, alpha=0.8)
+            
+            for bar, veh, opt_v in zip(bars, best_vehs, opt_vehs):
+                height = bar.get_height()
+                color = 'black' if veh == opt_v else 'red'
+                weight = 'normal' if veh == opt_v else 'bold'
+                ax.annotate(f'v={int(veh)}',
+                            xy=(bar.get_x() + bar.get_width() / 2, height),
+                            xytext=(0, 4),  
+                            textcoords="offset points",
+                            ha='center', va='bottom', fontsize=9, color=color, weight=weight, rotation=90)
             
         opt_dists = [datos_agregados[ALGORITMOS[0]][inst]['opt_dist'] for inst in insts_cls]
-        ax.plot(x_inst, opt_dists, 'kX', markersize=8, label='Óptimo (SINTEF)', zorder=5)
+        ax.plot(x_inst, opt_dists, 'kX', markersize=8, label='Distancia Óptima (SINTEF)', zorder=5)
             
         ax.set_ylabel('Mejor Distancia Alcanzada')
-        ax.set_title(f'Mejor Distancia (Mínimo N° Vehículos) - Clase {cls.upper()}')
+        ax.set_title(f'Resultados Clase {cls.upper()}: Distancia y Vehículos (v=X)\nTextos en ROJO indican que no se alcanzó el mínimo óptimo')
         ax.set_xticks(x_inst)
         ax.set_xticklabels([i.upper() for i in insts_cls], rotation=45)
-        ax.legend()
+        
+        ymax = max([datos_agregados[algo][inst]['best_dist'] for inst in insts_cls for algo in ALGORITMOS])
+        ax.set_ylim(0, ymax * 1.25)
+        ax.legend(loc='upper right')
         
         plt.tight_layout()
         plt.savefig(f'graficos/Comparacion_Instancias_{cls.upper()}.png', bbox_inches='tight', dpi=300)
@@ -219,7 +206,8 @@ def generar_graficos(resumen_graficos, datos_agregados, instancias_comunes):
     print("-> Gráficos generados exitosamente en la subcarpeta 'graficos/'.")
 
 if __name__ == "__main__":
-    datos = procesar_resultados()
-    resumen, comunes = imprimir_y_guardar_resumen(datos)
-    if resumen:
-        generar_graficos(resumen, datos, comunes)
+    datos, comunes = cargar_resultados()
+    if comunes:
+        imprimir_resumen_terminal(datos, comunes)
+        exportar_csv_global(datos, comunes)
+        generar_graficos(datos, comunes)
