@@ -49,30 +49,29 @@ bool ALNS::accept(double cand_cost, double curr_cost, double current_temp) {
     std::uniform_real_distribution<double> distr(0.0, 1.0);
     double random_val = distr(rng);
 
-    // Aceptada por el simulated annealing?
     if (random_val < prob) return true;
 
-    return false; // Rechazada
+    return false;
 }
 
 void ALNS::updateWeights(int used_destroy_idx, int used_repair_idx, double score) {
-    // Operadores destroy: \rho^- = \lambda * \rho^- + (1.0 - \lambda) * \psi
     destroy_weights[used_destroy_idx] = (decay * destroy_weights[used_destroy_idx]) + ((1.0 - decay) * score);
     if (destroy_weights[used_destroy_idx] < 0.01)
         destroy_weights[used_destroy_idx] = 0.01;
 
-    // Operadores repair: \rho^+ = \lambda * \rho^+ + (1.0 - \lambda) * \psi
     repair_weights[used_repair_idx] = (decay * repair_weights[used_repair_idx]) + ((1.0 - decay) * score);
     if (repair_weights[used_repair_idx] < 0.01)
         repair_weights[used_repair_idx] = 0.01;
 }
 
-Solution ALNS::solve(int max_iters, bool generate_data) {
+Solution ALNS::solve(int max_iters, bool save_history, bool generate_experiences) {
     double initial_d = current_sol.total_distance;
     start_temp = -(0.10 * initial_d) / std::log(0.5);
     double T = start_temp;
     int n_customers = inst.clients.size() - 1;
-    history.reserve(max_iters);
+    if (save_history) {
+        history.reserve(max_iters);
+    }
 
     int q_min = std::max(4, static_cast<int>(0.10 * n_customers));
     int q_max = std::max(q_min + 1, static_cast<int>(0.4 * n_customers));
@@ -81,62 +80,50 @@ Solution ALNS::solve(int max_iters, bool generate_data) {
     int iters_without_improvement = 0;
 
     for (int iter = 0; iter < max_iters; ++iter) {
-        // 1. Extraer estado actual
         std::vector<float> current_state;
-        if (generate_data) {
+        if (generate_experiences) {
             current_state = current_sol.extract_state_features(iters_without_improvement, iter, max_iters);
         }
 
         Solution candidate = current_sol;
-        int q = q_distr(rng); // Grado de destruccion (cuantos clientes se busca eliminar)
-
-        // Seleccion de operadores
+        int q = q_distr(rng);
         int d_idx = selectDestroyOp();
         int r_idx = selectRepairOp();
 
-        // r(d(x))
         destroy_ops[d_idx](candidate, q);
         repair_ops[r_idx](candidate);
 
-        // Evaluacion y scores
         double score = w4;
         double cand_cost = cost(candidate);
         double curr_cost = cost(current_sol);
         double best_cost = cost(best_sol);
 
         if (cand_cost < best_cost) {
-            // Nuevo mejor global
             best_sol = candidate;
             current_sol = candidate;
             score = w1;
             iters_without_improvement = 0;
         }
         else if (cand_cost == best_cost) {
-            // Si empata con el mejor global
             current_sol = candidate;
             score = w2;
         }
         else if (cand_cost < curr_cost) {
-            // Nuevo mejor actual
             current_sol = candidate;
             score = w2;
             iters_without_improvement = 0;
         }
         else if (accept(cand_cost, curr_cost, T)) {
-            // Solucion aceptada 
             current_sol = candidate;
             score = w3;
         }
         else {
-            // Mala solucion
             iters_without_improvement++;
         }
 
-        // Actualizacion de pesos
         updateWeights(d_idx, r_idx, score);
 
-        // Guardando metricas de la iteracion actual
-        if (generate_data) {
+        if (save_history) {
             IterationData data;
             data.iter = iter;
             data.best_vehicles = best_sol.used_vehicles;
@@ -151,20 +138,18 @@ Solution ALNS::solve(int max_iters, bool generate_data) {
             data.r_weights = repair_weights;
 
             history.emplace_back(data);
+        }
 
-            // 2. Extraer estado siguiente
+        if (generate_experiences) {
             std::vector<float> next_state = current_sol.extract_state_features(iters_without_improvement, iter + 1, max_iters);
 
-            // 3. Guardar experiencia
             ExperienceRecord exp;
             exp.state = current_state;
-            exp.action = d_idx * repair_ops.size() + r_idx; // Accion aplanada
+            exp.action = d_idx * repair_ops.size() + r_idx; 
             exp.reward = score;
             exp.next_state = next_state;
             experiences.emplace_back(exp);
         }
-
-        // Actualizacion de temperatura
         T = T * cooling_rate;
     }
 

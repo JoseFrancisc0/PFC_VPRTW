@@ -6,7 +6,6 @@
 #include <string>
 #include "../Operators/operators.h"
 
-// Para guardar metricas de analisis
 struct IterationData {
     int iter;
     int best_vehicles;
@@ -17,7 +16,6 @@ struct IterationData {
     int r_idx;
     double score;
     double temp;
-
     std::vector<double> d_weights;
     std::vector<double> r_weights;
 };
@@ -35,7 +33,7 @@ using RepairOp  = std::function<void(Solution&)>;
 class ALNS {
     public:
         ALNS(const Instance& _inst, const Solution& _initial_sol);
-        Solution solve(int max_iters, bool generate_data = false);
+        Solution solve(int max_iters, bool save_history = false, bool generate_experiences = false);
         void exportMetrics(const std::string& filename);
         void exportExperiences(const std::string& filename);
 
@@ -44,25 +42,21 @@ class ALNS {
         Solution current_sol;
         Solution best_sol;
 
-        std::vector<IterationData> history; // para guardar metricas
-        std::vector<ExperienceRecord> experiences; // para Dataset DQN
+        std::vector<IterationData> history;
+        std::vector<ExperienceRecord> experiences;
 
-        // Operadores de destroy (Omega^-)
         std::vector<DestroyOp> destroy_ops;
         std::vector<double> destroy_weights;
 
-        // Operadores de repair (Omega^+)
         std::vector<RepairOp> repair_ops;
         std::vector<double> repair_weights;
 
-        // Hiperparametros del ALNS
         double decay = 0.9;
         double w1 = 33.0;
         double w2 = 13.0;
         double w3 = 9.0;
         double w4 = 0.0;
 
-        // Hiperparametros del Simulated Annealing
         double start_temp;
         double cooling_rate = 0.9995;
 
@@ -73,4 +67,4 @@ class ALNS {
         void updateWeights(int used_destroy_idx, int used_repair_idx, double score);
 };
 
-#endif //ALNS_H
+#endif

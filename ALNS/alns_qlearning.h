@@ -11,15 +11,14 @@
 #include <deque>
 #include "../Operators/operators.h"
 
-// Estructura para almacenar las métricas de cada iteración
 struct IterationDataQL {
     int iter;
     int best_vehicles;
     double best_distance;
     int curr_vehicles;
     double curr_distance;
-    int d_idx;       // Índice del operador de destrucción
-    int r_idx;       // Índice del operador de reparación
+    int d_idx;    
+    int r_idx;  
     double reward;
     double temp;
     double epsilon;
@@ -39,22 +38,18 @@ class ALNS_QLearning {
         Solution current_sol;
         Solution best_sol;
         std::vector<IterationDataQL> history;
-        
-        // Listas de operadores independientes
+
         std::vector<DestroyOp> destroy_ops;
         std::vector<RepairOp> repair_ops;
 
-        // HIPERPARÁMETROS
         double start_temp;
         double cooling_rate = 0.9998; 
         
         double alpha = 0.05; 
         double gamma = 0.8; 
-        
-        // Estado binario: 0 (Sin mejora), 1 (Con mejora)
+
         int num_states = 2; 
-        
-        // Tablas Q independientes
+
         std::vector<std::vector<double>> Q_table_D;
         std::vector<std::vector<double>> Q_table_R;
 

@@ -196,11 +196,12 @@ void exportSolutionRoutes(const Solution& sol, const std::string& filename) {
     std::cout << "-> Estructura de rutas optimas exportada a " << filename << "\n";
 }
 
-Solution solve_with_classic(const Instance& inst, const Solution& sol, int max_iters, std::string metrics_path, std::string routes_path, std::string experiences_path, bool generate_data) {
+Solution solve_with_classic(const Instance& inst, const Solution& sol, int max_iters, std::string metrics_path, std::string routes_path, std::string experiences_path, bool generate_experiences) {
     std::cout << "[3] Iniciando ALNS por " << max_iters << " iteraciones...\n";
     ALNS solver(inst, sol);
     
-    Solution best_solution = solver.solve(max_iters, generate_data);
+    bool save_history = !metrics_path.empty();
+    Solution best_solution = solver.solve(max_iters, save_history, generate_experiences);
 
     if (!metrics_path.empty()) solver.exportMetrics(metrics_path);  
     if (!routes_path.empty()) exportSolutionRoutes(best_solution, routes_path);

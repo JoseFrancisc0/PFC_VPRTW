@@ -1,6 +1,5 @@
 #include <iostream>
 #include <chrono>
-#include <random>
 #include <string>
 #include "ALNS/alns.h"
 #include "ALNS/alns_qlearning.h"
@@ -10,179 +9,115 @@
 unsigned seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 std::mt19937 rng(seed);
 
-int test_benchmark() {
-    try {
-        std::cout << "==========================================\n";
-        std::cout << "    ALNS - VEHICLE ROUTING PROBLEM (VRPTW)\n";
-        std::cout << "==========================================\n";
-        std::cout << "[INFO] Seed utilizada: " << seed << "\n";
-
-        std::string instance_file = "solomon-100/rc2/rc201.txt";
-        std::cout << "[1] Cargando instancia: " << instance_file << "...\n";
-        Instance inst(instance_file);
-        std::cout << "    -> Nodos cargados: " << inst.clients.size() << "\n";
-
-        std::cout << "[2] Generando solucion inicial...\n";
-        Solution initial_sol(inst);
-        std::cout << initial_sol;
-
-        int max_iterations = 25000;
-
-        auto start_time = std::chrono::high_resolution_clock::now();
+void manual_run() {
+    std::cout << "==========================================\n";
+    std::cout << "        EJECUCION MANUAL (NO SAVE)\n";
+    std::cout << "==========================================\n";
     
-        // Elige uno
-        // Solution best_solution = solve_with_classic(inst, initial_sol, max_iterations, "Results/alns_metrics.csv");
-        Solution best_solution = solve_with_qlearning(inst, initial_sol, max_iterations, "Results/alns_qlearning_metrics.csv");
-        // Solution best_solution = solve_with_dqn(inst, initial_sol, max_iterations, "Results/alns_dqn_metrics.csv", "");
+    std::string instance_file = "solomon-100/rc1/rc101.txt";
+    std::string algorithm = "QLEARNING";
+    int max_iters = 25000;
 
-        auto end_time = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = end_time - start_time;
+    std::cout << "[INFO] Instancia: " << instance_file << "\n";
+    std::cout << "[INFO] Algoritmo: " << algorithm << "\n";
+    std::cout << "[INFO] Iteraciones: " << max_iters << "\n";
 
-        std::cout << "\n==========================================\n";
-        std::cout << "             BUSQUEDA TERMINADA\n";
-        std::cout << "==========================================\n";
-        std::cout << best_solution;
-        std::cout << "------------------------------------------\n";
-        std::cout << "Tiempo de CPU: " << diff.count() << " segundos\n";
+    Instance inst(instance_file);
+    Solution initial_sol(inst);
+    Solution best_solution(inst);
 
-    } catch (const std::exception& e) {
-        std::cerr << "ERROR FATAL: " << e.what() << "\n";
-        return 1;
-    }
-    return 0;
-}
+    auto start_time = std::chrono::high_resolution_clock::now();
 
-int minitest(const std::string& instance_file) {
-    try {
-        std::cout << "==========================================\n";
-        std::cout << "    ALNS - VEHICLE ROUTING PROBLEM (VRPTW)\n";
-        std::cout << "==========================================\n";
+    if (algorithm == "CLASSIC")
+        best_solution = solve_with_classic(inst, initial_sol, max_iters, "", "", "", false);
+    else if (algorithm == "QLEARNING")
+        best_solution = solve_with_qlearning(inst, initial_sol, max_iters, "", "");
+    else if (algorithm == "DQN")
+        best_solution = solve_with_dqn(inst, initial_sol, max_iters, "", "");
 
-        std::cout << "[1] Cargando instancia: " << instance_file << "...\n";
-        Instance inst(instance_file);
-        std::cout << "    -> Nodos cargados: " << inst.clients.size() << "\n";
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> diff = end_time - start_time;
 
-        std::cout << "[2] Generando solucion inicial...\n";
-        Solution initial_sol(inst);
-        std::cout << initial_sol;
-
-        int max_iterations = 25000;
-
-        auto start_time = std::chrono::high_resolution_clock::now();
-        
-        // Elige uno
-        Solution best_solution = solve_with_classic(inst, initial_sol, max_iterations, "");
-        // Solution best_solution = solve_with_qlearning(inst, initial_sol, max_iterations, "");
-
-        auto end_time = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = end_time - start_time;
-
-        std::cout << "\n==========================================\n";
-        std::cout << "             BUSQUEDA TERMINADA\n";
-        std::cout << "==========================================\n";
-        std::cout << best_solution;
-        std::cout << "------------------------------------------\n";
-        std::cout << "Tiempo de CPU: " << diff.count() << " segundos\n";
-
-        // GENERANDO MEJOR SOLUCION EXACTA
-        std::cout << "\n======MEJOR=SOLUCION=DE=LA=INSTANCIA======\n";
-
-        Solution empty_sol(inst);
-        empty_sol.routes.clear();
-
-        int N = inst.clients.size();
-        std::vector<bool> unassigned(N, true);
-        unassigned[0] = false;
-        int unassigned_count = N - 1;
-
-        double best_cost = std::numeric_limits<double>::max();
-        Solution best_sol(inst);
-
-        std::cout << "Iniciando Fuerza Bruta (Branch and Bound)...\n";
-        solveExact(empty_sol, unassigned, unassigned_count, best_cost, best_sol);
-
-        std::cout << "\n=== OPTIMO GLOBAL ENCONTRADO ===\n";
-        std::cout << best_sol;
-
-        verifySolution(inst, best_sol);
-
-    } catch (const std::exception& e) {
-        std::cerr << "ERROR FATAL: " << e.what() << "\n";
-        return 1;
-    }
-    return 0;
+    std::cout << "\n==========================================\n";
+    std::cout << "             BUSQUEDA TERMINADA\n";
+    std::cout << "==========================================\n";
+    std::cout << best_solution;
+    std::cout << "------------------------------------------\n";
+    std::cout << "Tiempo de CPU: " << diff.count() << " segundos\n";
 }
 
 int main(int argc, char** argv) {
     if (argc == 1) {
-        std::cout << "[MANUAL]\n";
-        test_benchmark();
+        manual_run();
+        return 0;
     }
-    else if (argc >= 4) {
-        try {
-            std::string instance_file = argv[1];
-            std::string algorithm = argv[2]; // "CLASSIC" / "QLEARNING" / "DQN"
-            int max_iters = std::stoi(argv[3]);
-            std::string run_id = (argc >= 5) ? argv[4] : "0";
-            
-            size_t last_slash = instance_file.find_last_of("/\\");
-            size_t last_dot = instance_file.find_last_of(".");
-            std::string inst_name = instance_file.substr(last_slash + 1, last_dot - last_slash - 1);
 
-            bool generate_data = false;
-            std::string metrics_file = "";
-            std::string routes_file = "";
-            std::string exp_file = "";
+    if (argc < 4) {
+        std::cerr << "Uso: " << argv[0] << " <ruta_instancia> <ALGORITMO> <max_iters> [modo_ejecucion]\n";
+        return 1;
+    }
+    
+    try {
+        std::string instance_file = argv[1];
+        std::string algorithm = argv[2]; 
+        int max_iters = std::stoi(argv[3]);
+        std::string exec_mode = (argc >= 5) ? argv[4] : "MANUAL_SAVE";
+        
+        size_t last_slash = instance_file.find_last_of("/\\");
+        size_t last_dot = instance_file.find_last_of(".");
+        std::string inst_name = instance_file.substr(last_slash + 1, last_dot - last_slash - 1);
 
-            if (run_id == "GENERATE_DATA") {
-                generate_data = true;
-                metrics_file = "../Results/" + algorithm + "/metrics/" + algorithm + "_" + inst_name + "_metrics_dataset.csv";
-                exp_file = "../DQN_Pipeline/experiences/experiences_" + inst_name + "_dataset.csv";
+        bool generate_experiences = false;
+        std::string metrics_file = "";
+        std::string routes_file = "";
+        std::string exp_file = "";
+
+        if (exec_mode == "GENERATE_DATA") {
+            generate_experiences = true;
+            exp_file = "../DQN_Pipeline/experiences/experiences_" + inst_name + "_dataset.csv";
+        }
+        else if (exec_mode == "BENCHMARK") {
+            // Ni se generan experiencias, ni se guarda history metrics a disco.
+        }
+        else if (exec_mode == "SAVE_HISTORY") {
+            metrics_file = "../Results/" + algorithm + "/metrics/" + algorithm + "_" + inst_name + "_metrics.csv";
+            routes_file = "../Results/" + algorithm + "/routes/" + algorithm + "_" + inst_name + "_routes.csv";
+        }
+        else {
+            if (exec_mode.find("NO_SAVE") == std::string::npos) {
+                metrics_file = "../Results/" + algorithm + "/metrics/" + algorithm + "_" + inst_name + "_metrics_run_" + exec_mode + ".csv";
+                routes_file = "../Results/" + algorithm + "/routes/" + algorithm + "_" + inst_name + "_routes_run_" + exec_mode + ".csv";
             }
-            else if (run_id == "BENCHMARK") {
-                // No guardamos nada en disco, solo reportamos por stdout
-            }
-            else {
-                // Modo clasico o manual que guarda por corrida
-                if (run_id.find("NO_SAVE") == std::string::npos) {
-                    metrics_file = "../Results/" + algorithm + "/metrics/" + algorithm + "_" + inst_name + "_metrics_run" + run_id + ".csv";
-                    routes_file = "../Results/" + algorithm + "/routes/" + algorithm + "_" + inst_name + "_routes_run" + run_id + ".csv";
-                }
-            }
+        }
 
-            Instance inst(instance_file);
-            Solution initial_sol(inst);
-            Solution best_solution(inst);
-            auto start_time = std::chrono::high_resolution_clock::now();
+        Instance inst(instance_file);
+        Solution initial_sol(inst);
+        Solution best_solution(inst);
+        auto start_time = std::chrono::high_resolution_clock::now();
 
-            if (algorithm == "CLASSIC")
-                best_solution = solve_with_classic(inst, initial_sol, max_iters, metrics_file, routes_file, exp_file, generate_data);
-            else if (algorithm == "QLEARNING")
-                best_solution = solve_with_qlearning(inst, initial_sol, max_iters, metrics_file, routes_file);
-            else if (algorithm == "DQN")
-                best_solution = solve_with_dqn(inst, initial_sol, max_iters, metrics_file, routes_file);
-            else {
-                std::cerr << "Algoritmo desconocido: " << algorithm << "\n";
-                return 1;
-            }
-
-            auto end_time = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> diff = end_time - start_time;
-
-            std::cout << "\n==========================================\n";
-            std::cout << "             BUSQUEDA TERMINADA\n";
-            std::cout << "==========================================\n";
-            std::cout << best_solution;
-            std::cout << "------------------------------------------\n";
-            std::cout << "Tiempo de CPU: " << diff.count() << " segundos\n";
-            std::cout << "[FINAL_RESULT] Veh: " << best_solution.used_vehicles << ", Dist: " << best_solution.total_distance << "\n";
-        } catch (const std::exception& e) {
-            std::cerr << "ERROR FATAL: " << e.what() << "\n";
+        if (algorithm == "CLASSIC")
+            best_solution = solve_with_classic(inst, initial_sol, max_iters, metrics_file, routes_file, exp_file, generate_experiences);
+        else if (algorithm == "QLEARNING")
+            best_solution = solve_with_qlearning(inst, initial_sol, max_iters, metrics_file, routes_file);
+        else if (algorithm == "DQN")
+            best_solution = solve_with_dqn(inst, initial_sol, max_iters, metrics_file, routes_file);
+        else {
+            std::cerr << "Algoritmo desconocido: " << algorithm << "\n";
             return 1;
         }
-    }
-    else {
-        std::cerr << "Uso incorrecto. Argumentos esperados: <instancia> <CLASSIC|QLEARNING|DQN> <iteraciones> [run_id]\n";
+
+        auto end_time = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = end_time - start_time;
+
+        std::cout << "\n==========================================\n";
+        std::cout << "             BUSQUEDA TERMINADA\n";
+        std::cout << "==========================================\n";
+        std::cout << best_solution;
+        std::cout << "------------------------------------------\n";
+        std::cout << "Tiempo de CPU: " << diff.count() << " segundos\n";
+        std::cout << "[FINAL_RESULT] Veh: " << best_solution.used_vehicles << ", Dist: " << best_solution.total_distance << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR FATAL: " << e.what() << "\n";
         return 1;
     }
 
