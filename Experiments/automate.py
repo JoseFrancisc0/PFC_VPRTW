@@ -11,7 +11,7 @@ EXEC_PATH = "../build/Release/ALNS_VRPTW.exe"
 BENCHMARK_DIR = "../solomon-100"
 SINTEF_CSV = "sintef.csv"
 
-ALGORITMOS = ["CLASSIC", "QLEARNING", "DQN"]
+ALGORITMOS = ["CLASSIC", "QLEARNING"] # "DQN" desactivado por defecto para evitar dependencia obligatoria de libtorch
 ITERACIONES = 25000
 RUNS = 10
 MAX_WORKERS = os.cpu_count() or 4  # Usar todos los núcleos disponibles

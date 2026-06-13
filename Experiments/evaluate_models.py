@@ -3,7 +3,7 @@ import csv
 import matplotlib.pyplot as plt
 import numpy as np
 
-ALGORITMOS = ["CLASSIC", "QLEARNING", "DQN"]
+ALGORITMOS = ["CLASSIC", "QLEARNING"] # "DQN" comentado para ejecucion sin libtorch
 CLASSES = ["c1", "c2", "r1", "r2", "rc1", "rc2"]
 
 def cargar_resultados():

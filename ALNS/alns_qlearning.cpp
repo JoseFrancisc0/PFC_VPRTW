@@ -2,7 +2,6 @@
 #include <iostream>
 #include <fstream>
 
-// Asumimos que rng está definido globalmente en operators.h o en tu main
 extern std::mt19937 rng; 
 
 ALNS_QLearning::ALNS_QLearning(const Instance& _inst, const Solution& _initial_sol) 
@@ -11,20 +10,17 @@ ALNS_QLearning::ALNS_QLearning(const Instance& _inst, const Solution& _initial_s
 }
 
 void ALNS_QLearning::initOps() {
-    // Operadores de Destrucción
     destroy_ops.push_back(randomRemoval);
-    destroy_ops.push_back(routeRemoval); // Vital para reducir vehículos
+    destroy_ops.push_back(routeRemoval);
     destroy_ops.push_back([](Solution& sol, int q) { worstRemoval(sol, q); });
     destroy_ops.push_back([](Solution& sol, int q) { shawRemoval(sol, q); });
     destroy_ops.push_back([](Solution& sol, int q) { timeWindowRemoval(sol, q); });
 
-    // Operadores de Reparación
     repair_ops.push_back(greedyInsertion);
     repair_ops.push_back(regret2Insertion);
     repair_ops.push_back(regret3Insertion);
     repair_ops.push_back([](Solution& sol) { pGreedyInsertion(sol); });
 
-    // Inicializar ambas tablas Q en 0.0 con dimensiones (2 x N)
     Q_table_D.assign(num_states, std::vector<double>(destroy_ops.size(), 0.0));
     Q_table_R.assign(num_states, std::vector<double>(repair_ops.size(), 0.0));
 }
@@ -32,11 +28,9 @@ void ALNS_QLearning::initOps() {
 int ALNS_QLearning::selectOp(const std::vector<double>& q_values, double epsilon) {
     std::uniform_real_distribution<double> distr(0.0, 1.0);
     if (distr(rng) < epsilon) {
-        // Exploración: selección aleatoria
         std::uniform_int_distribution<int> act_distr(0, q_values.size() - 1);
         return act_distr(rng);
     } else {
-        // Explotación: argmax Q(s, a)
         auto it = std::max_element(q_values.begin(), q_values.end());
         return std::distance(q_values.begin(), it);
     }
@@ -52,14 +46,12 @@ bool ALNS_QLearning::accept(double cand_cost, double curr_cost, double T) {
 
 Solution ALNS_QLearning::solve(int max_iters, bool save_history) {
     double initial_d = current_sol.total_distance;
-    
-    // 1. Igualar la agresividad térmica del ALNS estándar
     start_temp = -(0.10 * initial_d) / std::log(0.5);
     double T = start_temp;
     
     double epsilon = 1.0;
-    double epsilon_decay = 0.998; // Decaimiento más lento para n=100
-    double epsilon_min = 0.15;    // Mantener un 15% de exploración pura
+    double epsilon_decay = 0.998; 
+    double epsilon_min = 0.15; 
     
     double eta = 0.8; 
     double C = 100.0; 
@@ -72,8 +64,7 @@ Solution ALNS_QLearning::solve(int max_iters, bool save_history) {
 
     for (int iter = 1; iter <= max_iters; ++iter) {
         Solution candidate = current_sol;
-        
-        // 2. Igualar la capacidad de destrucción profunda del ALNS estándar
+
         int q_min = std::max(4, static_cast<int>(0.10 * n_customers));
         int q_max = std::max(q_min + 1, static_cast<int>(0.40 * n_customers));
         std::uniform_int_distribution<int> q_distr(q_min, q_max);
@@ -85,12 +76,10 @@ Solution ALNS_QLearning::solve(int max_iters, bool save_history) {
         destroy_ops[d_idx](candidate, q);
         repair_ops[r_idx](candidate);
         
-        // 3. Volver al costo unificado para que delta_global sea matemáticamente continuo
         double cand_cost = cost(candidate);
         double curr_cost = cost(current_sol);
         double best_cost = cost(best_sol);
 
-        // Cálculo de mejoras relativas usando el costo total
         double delta_global = std::max((best_cost - cand_cost) / best_cost, 0.0);
         double delta_local  = std::max((curr_cost - cand_cost) / curr_cost, 0.0);
         double delta_improvement = (delta_global * eta) + (delta_local * (1.0 - eta));
@@ -100,17 +89,14 @@ Solution ALNS_QLearning::solve(int max_iters, bool save_history) {
         double reward = 0.0;
         int next_state = 0;
 
-        // Lógica de Recompensa Guiada por Tiempo de la fuente
         if (delta_improvement > 0) {
             reward = (delta_improvement * iter) / C;
             next_state = 1; 
         } else {
-            // El costo de oportunidad penaliza la falta de mejora
             reward = ((delta_improvement - opportunity_cost) * iter) / C;
             next_state = 0; 
         }
 
-        // Criterio de Aceptación Clásico
         if (cand_cost < best_cost) {
             best_sol = candidate;
             current_sol = candidate;
@@ -118,14 +104,11 @@ Solution ALNS_QLearning::solve(int max_iters, bool save_history) {
             current_sol = candidate;
         }
 
-        // Actualización de Bellman para las Tablas Q
         double max_next_q_D = *std::max_element(Q_table_D[next_state].begin(), Q_table_D[next_state].end());
         double max_next_q_R = *std::max_element(Q_table_R[next_state].begin(), Q_table_R[next_state].end());
 
         Q_table_D[current_state][d_idx] += alpha * (reward + gamma * max_next_q_D - Q_table_D[current_state][d_idx]);
         Q_table_R[current_state][r_idx] += alpha * (reward + gamma * max_next_q_R - Q_table_R[current_state][r_idx]);
-
-        // ... (Guardado de historial omitido) ...
 
         current_state = next_state;
         T = T * cooling_rate; 
