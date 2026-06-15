@@ -200,7 +200,10 @@ Solution solve_with_classic(const Instance& inst, const Solution& sol, int max_i
     std::cout << "[3] Iniciando ALNS por " << max_iters << " iteraciones...\n";
     ALNS solver(inst, sol);
     
-    Solution best_solution = solver.solve(max_iters);
+    bool save_metrics = false;
+    if (!metrics_path.empty()) save_metrics = true;
+
+    Solution best_solution = solver.solve(max_iters, save_metrics);
 
     if (!metrics_path.empty()) solver.exportMetrics(metrics_path);  
     if (!routes_path.empty()) exportSolutionRoutes(best_solution, routes_path);
@@ -213,7 +216,10 @@ Solution solve_with_qlearning(const Instance& inst, const Solution& sol, int max
     std::cout << "[3] Iniciando ALNS con Q-Learning por " << max_iters << " iteraciones...\n";
     ALNS_QLearning solver(inst, sol);
 
-    Solution best_solution = solver.solve(max_iters);
+    bool save_metrics = false;
+    if (!metrics_path.empty()) save_metrics = true;
+
+    Solution best_solution = solver.solve(max_iters, save_metrics);
 
     if (!metrics_path.empty()) solver.exportMetrics(metrics_path);  
     if (!routes_path.empty()) exportSolutionRoutes(best_solution, routes_path);

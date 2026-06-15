@@ -14,6 +14,9 @@ void ALNS::initOps() {
     destroy_ops.push_back([](Solution& sol, int q) {
         shawRemoval(sol, q);
     });
+    destroy_ops.push_back([](Solution& sol, int q) {
+        timeWindowRemoval(sol, q);
+    });
 
     repair_ops.push_back(greedyInsertion);
     repair_ops.push_back(regret2Insertion);
@@ -49,30 +52,28 @@ bool ALNS::accept(double cand_cost, double curr_cost, double current_temp) {
     std::uniform_real_distribution<double> distr(0.0, 1.0);
     double random_val = distr(rng);
 
-    // Aceptada por el simulated annealing?
     if (random_val < prob) return true;
 
-    return false; // Rechazada
+    return false;
 }
 
 void ALNS::updateWeights(int used_destroy_idx, int used_repair_idx, double score) {
-    // Operadores destroy: \rho^- = \lambda * \rho^- + (1.0 - \lambda) * \psi
     destroy_weights[used_destroy_idx] = (decay * destroy_weights[used_destroy_idx]) + ((1.0 - decay) * score);
     if (destroy_weights[used_destroy_idx] < 0.01)
         destroy_weights[used_destroy_idx] = 0.01;
 
-    // Operadores repair: \rho^+ = \lambda * \rho^+ + (1.0 - \lambda) * \psi
     repair_weights[used_repair_idx] = (decay * repair_weights[used_repair_idx]) + ((1.0 - decay) * score);
     if (repair_weights[used_repair_idx] < 0.01)
         repair_weights[used_repair_idx] = 0.01;
 }
 
-Solution ALNS::solve(int max_iters) {
+Solution ALNS::solve(int max_iters, bool save_metrics) {
     double initial_d = current_sol.total_distance;
     start_temp = -(0.10 * initial_d) / std::log(0.5);
     double T = start_temp;
     int n_customers = inst.clients.size() - 1;
-    history.reserve(max_iters);
+
+    if (save_metrics) { history.reserve(max_iters); }
 
     int q_min = std::max(4, static_cast<int>(0.10 * n_customers));
     int q_max = std::max(q_min + 1, static_cast<int>(0.4 * n_customers));
@@ -80,62 +81,59 @@ Solution ALNS::solve(int max_iters) {
 
     for (int iter = 0; iter < max_iters; ++iter) {
         Solution candidate = current_sol;
-        int q = q_distr(rng); // Grado de destruccion (cuantos clientes se busca eliminar)
+        int q = q_distr(rng);
 
-        // Seleccion de operadores
         int d_idx = selectDestroyOp();
         int r_idx = selectRepairOp();
 
-        // r(d(x))
         destroy_ops[d_idx](candidate, q);
         repair_ops[r_idx](candidate);
 
-        // Evaluacion y scores
         double score = w4;
         double cand_cost = cost(candidate);
         double curr_cost = cost(current_sol);
         double best_cost = cost(best_sol);
 
         if (cand_cost < best_cost) {
-            // Nuevo mejor global
             best_sol = candidate;
             current_sol = candidate;
             score = w1;
         }
+        else if (cand_cost == best_cost) {
+            current_sol = candidate;
+            score = w2;
+        }
         else if (cand_cost < curr_cost) {
-            // Nuevo mejor actual
             current_sol = candidate;
             score = w2;
         }
         else if (accept(cand_cost, curr_cost, T)) {
-            // Solucion aceptada 
             current_sol = candidate;
             score = w3;
         }
         else {
-            // Mala solucion
+            // Nada
         }
 
-        // Actualizacion de pesos
         updateWeights(d_idx, r_idx, score);
+        
+        if (save_metrics) {
+            IterationData data;
+            data.iter = iter;
+            data.best_vehicles = best_sol.used_vehicles;
+            data.best_distance = best_sol.total_distance;
+            data.curr_vehicles = current_sol.used_vehicles;
+            data.curr_distance = current_sol.total_distance;
+            data.d_idx = d_idx;
+            data.r_idx = r_idx;
+            data.score = score;
+            data.temp = T;
+            data.d_weights = destroy_weights;
+            data.r_weights = repair_weights;
 
-        // Guardando metricas de la iteracion actual
-        IterationData data;
-        data.iter = iter;
-        data.best_vehicles = best_sol.used_vehicles;
-        data.best_distance = best_sol.total_distance;
-        data.curr_vehicles = current_sol.used_vehicles;
-        data.curr_distance = current_sol.total_distance;
-        data.d_idx = d_idx;
-        data.r_idx = r_idx;
-        data.score = score;
-        data.temp = T;
-        data.d_weights = destroy_weights;
-        data.r_weights = repair_weights;
+            history.emplace_back(data);
+        }
 
-        history.emplace_back(data);
-
-        // Actualizacion de temperatura
         T = T * cooling_rate;
     }
 

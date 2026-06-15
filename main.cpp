@@ -1,6 +1,6 @@
 #include <iostream>
+#include <ctime>
 #include <chrono>
-#include <random>
 #include <string>
 #include "ALNS/alns.h"
 #include "ALNS/alns_qlearning.h"
@@ -27,82 +27,22 @@ int test_benchmark() {
 
         int max_iterations = 25000;
 
-        auto start_time = std::chrono::high_resolution_clock::now();
+        std::clock_t start_time = std::clock();
     
         // Elige uno
-        Solution best_solution = solve_with_classic(inst, initial_sol, max_iterations, "../Results/alns_metrics.csv");
-        // Solution best_solution = solve_with_qlearning(inst, initial_sol, max_iterations, "../Results/alns_qlearning_metrics.csv");
+        Solution best_solution = solve_with_classic(inst, initial_sol, max_iterations);
+        // Solution best_solution = solve_with_qlearning(inst, initial_sol, max_iterations);
 
-        auto end_time = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = end_time - start_time;
+        std::clock_t end_time = std::clock();
 
-        std::cout << "\n==========================================\n";
-        std::cout << "             BUSQUEDA TERMINADA\n";
-        std::cout << "==========================================\n";
-        std::cout << best_solution;
-        std::cout << "------------------------------------------\n";
-        std::cout << "Tiempo de CPU: " << diff.count() << " segundos\n";
-
-    } catch (const std::exception& e) {
-        std::cerr << "ERROR FATAL: " << e.what() << "\n";
-        return 1;
-    }
-    return 0;
-}
-
-int minitest(const std::string& instance_file) {
-    try {
-        std::cout << "==========================================\n";
-        std::cout << "    ALNS - VEHICLE ROUTING PROBLEM (VRPTW)\n";
-        std::cout << "==========================================\n";
-
-        std::cout << "[1] Cargando instancia: " << instance_file << "...\n";
-        Instance inst(instance_file);
-        std::cout << "    -> Nodos cargados: " << inst.clients.size() << "\n";
-
-        std::cout << "[2] Generando solucion inicial...\n";
-        Solution initial_sol(inst);
-        std::cout << initial_sol;
-
-        int max_iterations = 25000;
-
-        auto start_time = std::chrono::high_resolution_clock::now();
-        
-        // Elige uno
-        Solution best_solution = solve_with_classic(inst, initial_sol, max_iterations, "");
-        //Solution best_solution = solve_with_qlearning(inst, initial_sol, max_iterations, "");
-
-        auto end_time = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = end_time - start_time;
+        double diff = static_cast<double>(end_time - start_time) / CLOCKS_PER_SEC;
 
         std::cout << "\n==========================================\n";
         std::cout << "             BUSQUEDA TERMINADA\n";
         std::cout << "==========================================\n";
         std::cout << best_solution;
         std::cout << "------------------------------------------\n";
-        std::cout << "Tiempo de CPU: " << diff.count() << " segundos\n";
-
-        // GENERANDO MEJOR SOLUCION EXACTA
-        std::cout << "\n======MEJOR=SOLUCION=DE=LA=INSTANCIA======\n";
-
-        Solution empty_sol(inst);
-        empty_sol.routes.clear();
-
-        int N = inst.clients.size();
-        std::vector<bool> unassigned(N, true);
-        unassigned[0] = false;
-        int unassigned_count = N - 1;
-
-        double best_cost = std::numeric_limits<double>::max();
-        Solution best_sol(inst);
-
-        std::cout << "Iniciando Fuerza Bruta (Branch and Bound)...\n";
-        solveExact(empty_sol, unassigned, unassigned_count, best_cost, best_sol);
-
-        std::cout << "\n=== OPTIMO GLOBAL ENCONTRADO ===\n";
-        std::cout << best_sol;
-
-        verifySolution(inst, best_sol);
+        std::cout << "Tiempo de CPU: " << diff << " segundos\n";
 
     } catch (const std::exception& e) {
         std::cerr << "ERROR FATAL: " << e.what() << "\n";
@@ -132,6 +72,8 @@ int main(int argc, char** argv) {
             
             std::string metrics_file = "../Results/" + algorithm + "/metrics/" + algorithm + "_" + inst_name + "_metrics_run" + run_id + ".csv";
             std::string routes_file = "../Results/" + algorithm + "/routes/" + algorithm + "_" + inst_name + "_metrics_run" + run_id + ".csv";
+            
+            std::clock_t start_cpu = std::clock();
 
             if (algorithm == "CLASSIC")
                 solve_with_classic(inst, initial_sol, max_iters, metrics_file, routes_file);
@@ -141,6 +83,11 @@ int main(int argc, char** argv) {
                 std::cerr << "Algoritmo desconocido: " << algorithm << "\n";
                 return 1;
             }
+
+            std::clock_t end_cpu = std::clock();
+            double cpu_time_used = static_cast<double>(end_cpu - start_cpu) / CLOCKS_PER_SEC;
+            std::cout << "Tiempo de CPU real: " << cpu_time_used << " segundos\n";
+
         } catch (const std::exception& e) {
             std::cerr << "ERROR FATAL: " << e.what() << "\n";
             return 1;
