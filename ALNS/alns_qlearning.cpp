@@ -162,7 +162,7 @@ void ALNS_QLearning::exportMetrics(const std::string& filename) {
              << data.reward << ","
              << data.temp << ","
              << data.epsilon << ","
-             << data.state << ",";
+             << data.state;
         for (double q : data.q_d_state0) file << "," << q;
         for (double q : data.q_d_state1) file << "," << q;
         for (double q : data.q_r_state0) file << "," << q;
