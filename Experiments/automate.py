@@ -4,7 +4,6 @@ import time
 import glob
 import re
 import csv
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 EXEC_PATH = "../build/ALNS_vrptw.exe"
 BENCHMARK_DIR = "../solomon-100"
@@ -13,7 +12,6 @@ RESULTS_DIR = "../Results"
 ALGORITMOS = ["CLASSIC", "QLEARNING"]
 ITERACIONES = 25000
 RUNS = 10
-MAX_WORKERS = 8
 
 def preparar_directorios():
     print("Verificando estructura de directorios...")
@@ -67,35 +65,51 @@ def ejecutar_experimentos():
         print(f"[ERROR] No se encontraron instancias válidas en {BENCHMARK_DIR}")
         return
 
-    tareas = []
+    total_instancias = len(instancias)
+    total_runs = total_instancias * len(ALGORITMOS) * RUNS
+    run_actual = 0
+    
+    registro_tiempos = []
+
+    print(f"\n=== Iniciando experimentos SECUENCIALES: {total_instancias} instancias | {total_runs} ejecuciones ===")
+    start_total = time.time()
+    
     for inst_path in instancias:
         inst_name = os.path.basename(inst_path).replace('.txt', '')
+        
         for algo in ALGORITMOS:
             for run in range(1, RUNS + 1):
-                tareas.append((inst_path, inst_name, algo, run))
+                run_actual += 1
+                
+                comando = [
+                    EXEC_PATH,
+                    inst_path,
+                    algo,
+                    str(ITERACIONES),
+                    str(run)
+                ]
+                
+                print(f"[{run_actual}/{total_runs}] Ejecutando {algo} | Instancia: {inst_name} | Run: {run}...", end="", flush=True)
+                
+                try:
+                    resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
+                    
+                    match = re.search(r"Tiempo de CPU real:\s*([0-9.]+)\s*segundos", resultado.stdout)
+                    tiempo_cpu = float(match.group(1)) if match else -1.0
+                    
+                    print(f" [OK] ({tiempo_cpu}s CPU)")
 
-    total_runs = len(tareas)
-    registro_tiempos = []
-    
-    print(f"\n=== Iniciando experimentos: {len(instancias)} instancias | {total_runs} ejecuciones ===")
-    print(f"=== Utilizando {MAX_WORKERS} procesos en paralelo ===")
-    start_total = time.time()
-
-    completados = 0
-    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futuros = {executor.submit(ejecutar_run_individual, *args): args for args in tareas}
-        
-        for futuro in as_completed(futuros):
-            completados += 1
-            resultado = futuro.result()
-            
-            if resultado["Exito"]:
-                datos = resultado["Datos"]
-                registro_tiempos.append(datos)
-                print(f"[{completados}/{total_runs}] OK -> {datos['Algoritmo']} | {datos['Instancia']} | Run: {datos['Run']} | {datos['Tiempo_s']}s")
-            else:
-                args = futuros[futuro]
-                print(f"[{completados}/{total_runs}] ERROR en {args[2]} | {args[1]} | Run: {args[3]}\nDetalle: {resultado['Error']}")
+                    registro_tiempos.append({
+                        "Instancia": inst_name.lower(),
+                        "Algoritmo": algo,
+                        "Run": run,
+                        "Tiempo_s": tiempo_cpu
+                    })
+                    
+                except subprocess.CalledProcessError as e:
+                    print(f" [ERROR FATAL]")
+                    print(e.stderr)
+                    continue 
 
     end_total = time.time()
 
@@ -107,7 +121,7 @@ def ejecutar_experimentos():
 
     horas, rem = divmod(end_total - start_total, 3600)
     minutos, segundos = divmod(rem, 60)
-    print(f"\n=== Experimentos terminados en {int(horas)}h {int(minutos)}m {segundos:.2f}s ===")
+    print(f"\n=== Experimentos terminados exitosamente en {int(horas)}h {int(minutos)}m {segundos:.2f}s (Tiempo Wall-Clock Total) ===")
     print(f"-> Archivo de tiempos guardado con éxito en: {csv_path}")
 
 if __name__ == "__main__":
