@@ -36,9 +36,13 @@ int ALNS_QLearning::selectOp(const std::vector<double>& q_values, double epsilon
     }
 }
 
-bool ALNS_QLearning::accept(double cand_cost, double curr_cost, double T) {
-    double delta = cand_cost - curr_cost;
+bool ALNS_QLearning::accept(const Solution& cand, const Solution& curr, double T) {
+    const double SA_VEH_PENALTY = 1e7;
+    double delta =    (cand.used_vehicles - curr.used_vehicles) * SA_VEH_PENALTY
+                    + (cand.total_distance - curr.total_distance);
+    
     if (delta <= 0) return true;
+
     double prob = std::exp(-delta / T);
     std::uniform_real_distribution<double> distr(0.0, 1.0);
     return distr(rng) < prob; 
@@ -62,12 +66,16 @@ Solution ALNS_QLearning::solve(int max_iters, bool save_metrics) {
     
     if (save_metrics) { history.reserve(max_iters); }
 
+    const int Q_FLOOR_CAP = 30;
+    const int Q_MAX_CAP   = 60;
+
+    int q_min = std::min(Q_FLOOR_CAP, std::max(4, static_cast<int>(0.10 * n_customers)));
+    int q_max = std::min(Q_MAX_CAP,   std::max(q_min + 1, static_cast<int>(0.40 * n_customers)));
+        q_max = std::max(q_max, q_min + 1);
+    std::uniform_int_distribution<int> q_distr(q_min, q_max);
+
     for (int iter = 1; iter <= max_iters; ++iter) {
         Solution candidate = current_sol;
-
-        int q_min = std::max(4, static_cast<int>(0.10 * n_customers));
-        int q_max = std::max(q_min + 1, static_cast<int>(0.40 * n_customers));
-        std::uniform_int_distribution<int> q_distr(q_min, q_max);
         int q = q_distr(rng);
         
         int d_idx = selectOp(Q_table_D[current_state], epsilon);
@@ -100,7 +108,7 @@ Solution ALNS_QLearning::solve(int max_iters, bool save_metrics) {
         if (cand_cost < best_cost) {
             best_sol = candidate;
             current_sol = candidate;
-        } else if (cand_cost < curr_cost || accept(cand_cost, curr_cost, T)) {
+        } else if (cand_cost < curr_cost || accept(candidate, current_sol, T)) {
             current_sol = candidate;
         }
 

@@ -44,17 +44,16 @@ int ALNS::selectRepairOp() {
     return selected_idx;
 }
 
-bool ALNS::accept(double cand_cost, double curr_cost, double current_temp) {
-    double delta = cand_cost - curr_cost;
-    if (delta <= 0) return true;
+bool ALNS::accept(const Solution& cand, const Solution& curr, double T) {
+    const double SA_VEH_PENALTY = 1e7;
+    double delta =    (cand.used_vehicles - curr.used_vehicles) * SA_VEH_PENALTY
+                    + (cand.total_distance - curr.total_distance);
     
-    double prob  = std::exp(-delta / current_temp);
+    if (delta <= 0) return true;
+
+    double prob = std::exp(-delta / T);
     std::uniform_real_distribution<double> distr(0.0, 1.0);
-    double random_val = distr(rng);
-
-    if (random_val < prob) return true;
-
-    return false;
+    return distr(rng) < prob;
 }
 
 void ALNS::updateWeights(int used_destroy_idx, int used_repair_idx, double score) {
@@ -75,8 +74,12 @@ Solution ALNS::solve(int max_iters, bool save_metrics) {
 
     if (save_metrics) { history.reserve(max_iters); }
 
-    int q_min = std::max(4, static_cast<int>(0.10 * n_customers));
-    int q_max = std::max(q_min + 1, static_cast<int>(0.4 * n_customers));
+    const int Q_FLOOR_CAP = 30;
+    const int Q_MAX_CAP   = 60;
+
+    int q_min = std::min(Q_FLOOR_CAP, std::max(4, static_cast<int>(0.10 * n_customers)));
+    int q_max = std::min(Q_MAX_CAP,   std::max(q_min + 1, static_cast<int>(0.40 * n_customers)));
+        q_max = std::max(q_max, q_min + 1);
     std::uniform_int_distribution<int> q_distr(q_min, q_max);
 
     for (int iter = 0; iter < max_iters; ++iter) {
@@ -90,24 +93,16 @@ Solution ALNS::solve(int max_iters, bool save_metrics) {
         repair_ops[r_idx](candidate);
 
         double score = w4;
-        double cand_cost = cost(candidate);
-        double curr_cost = cost(current_sol);
-        double best_cost = cost(best_sol);
-
-        if (cand_cost < best_cost) {
+        if (candidate < best_sol) {
             best_sol = candidate;
             current_sol = candidate;
             score = w1;
         }
-        else if (cand_cost == best_cost) {
+        else if (candidate < current_sol) {
             current_sol = candidate;
             score = w2;
         }
-        else if (cand_cost < curr_cost) {
-            current_sol = candidate;
-            score = w2;
-        }
-        else if (accept(cand_cost, curr_cost, T)) {
+        else if (accept(candidate, current_sol, T)) {
             current_sol = candidate;
             score = w3;
         }
@@ -150,7 +145,7 @@ void ALNS::exportMetrics(const std::string& filename) {
     file << "iter,best_veh,best_dist,curr_veh,curr_dist,d_op,r_op,score,temp";
 
     for (size_t i = 0; i < destroy_ops.size(); ++i) file << ",d_weight_" << i;
-    for (size_t i = 0; i < repair_ops.size(); ++i) file << ",r_weight_" << i;
+    for (size_t i = 0; i < repair_ops.size() ; ++i) file << ",r_weight_" << i;
     file << "\n";
 
     for (const auto& data : history) {

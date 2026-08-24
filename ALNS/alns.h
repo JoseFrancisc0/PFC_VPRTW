@@ -49,12 +49,12 @@ class ALNS {
         double w4 = 0.0;
 
         double start_temp;
-        double cooling_rate = 0.9995;
+        double cooling_rate = 0.9998;
 
         void initOps();
         int selectDestroyOp();
         int selectRepairOp();
-        bool accept(double cand_cost, double curr_cost, double current_temp);
+        bool accept(const Solution& cand, const Solution& curr, double T);
         void updateWeights(int used_destroy_idx, int used_repair_idx, double score);
 };
 

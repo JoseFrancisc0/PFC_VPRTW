@@ -64,7 +64,7 @@ class ALNS_QLearning {
         std::vector<std::vector<double>> Q_repair_best;
 
         void initOps();
-        bool accept(double cand_cost, double curr_cost, double current_temp);
+        bool accept(const Solution& cand, const Solution& curr, double T);
         int selectOp(const std::vector<double>& q_values, double epsilon);
 };
 
